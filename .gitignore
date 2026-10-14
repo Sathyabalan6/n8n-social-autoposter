@@ -1,0 +1,10 @@
+# Ignore uploaded media files
+uploads/
+*.mp4
+*.mov
+*.avi
+
+# Node / OS files
+node_modules/
+.DS_Store
+Thumbs.db

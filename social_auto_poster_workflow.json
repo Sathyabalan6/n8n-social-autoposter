@@ -1,0 +1,373 @@
+{
+  "name": "Multi-Platform Social Media Auto-Poster & Scheduler",
+  "id": "leRpBQifPnpbfGEb",
+  "nodes": [
+    {
+      "id": "form-trigger-1",
+      "name": "Social Media Form Trigger",
+      "webhookId": "6ff54b3d-9db1-4a28-b8e9-7c6b7fe2ba4e",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [112, 192],
+      "parameters": {
+        "formTitle": "Social Media Multi-Poster Studio",
+        "formDescription": "Publish or schedule posts across LinkedIn, X (Twitter), Facebook, Instagram, Threads, and YouTube.",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Master Description / Content", "fieldType": "textarea", "requiredField": true },
+            { "fieldLabel": "Master Hashtags", "fieldType": "text", "requiredField": false },
+            { "fieldLabel": "Media Attachment", "fieldType": "file", "requiredField": false },
+            { "fieldLabel": "Schedule Time (Leave blank for immediate)", "fieldType": "date", "requiredField": false },
+            {
+              "fieldLabel": "Select Platforms to Publish",
+              "fieldType": "checkbox",
+              "fieldOptions": {
+                "values": [
+                  { "option": "YouTube" },
+                  { "option": "X (Twitter)" },
+                  { "option": "LinkedIn" },
+                  { "option": "Facebook" },
+                  { "option": "Instagram" },
+                  { "option": "Threads" }
+                ]
+              }
+            },
+            { "fieldLabel": "YouTube Video Title", "fieldType": "text", "requiredField": false },
+            { "fieldLabel": "X (Twitter) Custom Copy (max 280 chars)", "fieldType": "textarea", "requiredField": false },
+            { "fieldLabel": "LinkedIn Custom Copy", "fieldType": "textarea", "requiredField": false },
+            { "fieldLabel": "Instagram Custom Caption", "fieldType": "textarea", "requiredField": false },
+            { "fieldLabel": "Threads Custom Copy", "fieldType": "textarea", "requiredField": false }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "normalize-form-data",
+      "name": "Normalize Form Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 200],
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst now = new Date().toISOString();\n\nconst selected = Array.isArray(data['Select Platforms to Publish'])\n  ? data['Select Platforms to Publish']\n  : (data['Select Platforms to Publish'] ? [data['Select Platforms to Publish']] : []);\n\nconst hasPlatform = (name) => selected.some(p => String(p).toLowerCase().includes(name.toLowerCase()));\nconst postYouTube = hasPlatform('youtube') || Boolean(data['YouTube Video Title'] && data['YouTube Video Title'].trim());\n\nconst baseText = data['Master Description / Content'] || '';\nconst baseTags = data['Master Hashtags'] ? (' ' + data['Master Hashtags'].trim()) : '';\n\nconst xText = ((data['X (Twitter) Custom Copy (max 280 chars)'] && data['X (Twitter) Custom Copy (max 280 chars)'].trim()) || baseText).slice(0, 270) + baseTags;\nconst linkedinText = ((data['LinkedIn Custom Copy'] && data['LinkedIn Custom Copy'].trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\nconst facebookText = baseText + (baseTags ? ('\\n\\n' + baseTags) : '');\nconst igCaption = ((data['Instagram Custom Caption'] && data['Instagram Custom Caption'].trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\nconst threadsText = ((data['Threads Custom Copy'] && data['Threads Custom Copy'].trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\nconst ytTitle = ((data['YouTube Video Title'] && data['YouTube Video Title'].trim()) || baseText).slice(0, 100);\n\nconst binaryIn = $input.item.binary || {};\nconst binaryOut = {};\nif (binaryIn.Media_Attachment) {\n  binaryOut.data = binaryIn.Media_Attachment;\n}\n\nreturn {\n  json: {\n    status: 'completed',\n    master_text: baseText,\n    master_hashtags: data['Master Hashtags'] || '',\n    post_to_x: hasPlatform('x') || hasPlatform('twitter'),\n    post_to_linkedin: hasPlatform('linkedin'),\n    post_to_facebook: hasPlatform('facebook'),\n    post_to_instagram: hasPlatform('instagram'),\n    post_to_threads: hasPlatform('threads'),\n    post_to_youtube: postYouTube,\n    x_post: xText,\n    linkedin_post: linkedinText,\n    facebook_post: facebookText,\n    instagram_caption: igCaption,\n    threads_post: threadsText,\n    youtube_title: ytTitle\n  },\n  binary: binaryOut\n};"
+      }
+    },
+    {
+      "id": "enqueue-post",
+      "name": "Enqueue Post to Queue Table",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [592, 192],
+      "parameters": {
+        "dataTableId": { "mode": "id", "value": "04Y6TGIEdNDWPCp7" },
+        "columns": { "mappingMode": "autoMapInputData" },
+        "options": {}
+      }
+    },
+    {
+      "id": "schedule-timer-cron",
+      "name": "Check Post Queue Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [112, 688],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 1 }]
+        }
+      }
+    },
+    {
+      "id": "fetch-due-posts",
+      "name": "Fetch Scheduled Posts",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [352, 688],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": { "mode": "id", "value": "04Y6TGIEdNDWPCp7" },
+        "filters": {
+          "conditions": [
+            { "keyName": "status", "condition": "eq", "keyValue": "scheduled" }
+          ]
+        },
+        "returnAll": true,
+        "matchType": "allConditions"
+      }
+    },
+    {
+      "id": "filter-and-adapt-content",
+      "name": "Filter Due Posts & Format Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [592, 688],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst now = new Date().getTime();\nconst due = [];\n\nfor (const item of items) {\n  const row = item.json;\n  const postTime = new Date(row.scheduled_at || 0).getTime();\n  \n  if (postTime <= now) {\n    const baseText = row.master_text || '';\n    const baseTags = row.master_hashtags ? (' ' + row.master_hashtags.trim()) : '';\n\n    const xText = ((row.x_override && row.x_override.trim()) || baseText).slice(0, 270) + baseTags;\n    const linkedinText = ((row.linkedin_override && row.linkedin_override.trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\n    const facebookText = baseText + (baseTags ? ('\\n\\n' + baseTags) : '');\n    const igCaption = ((row.instagram_override && row.instagram_override.trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\n    const threadsText = ((row.threads_override && row.threads_override.trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\n    const ytTitle = ((row.youtube_title && row.youtube_title.trim()) || baseText).slice(0, 100);\n\n    due.push({\n      json: {\n        ...row,\n        x_post: xText,\n        linkedin_post: linkedinText,\n        facebook_post: facebookText,\n        instagram_caption: igCaption,\n        threads_post: threadsText,\n        youtube_title: ytTitle\n      }\n    });\n  }\n}\n\nreturn due;"
+      }
+    },
+    {
+      "id": "mark-completed",
+      "name": "Mark Post as Completed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "onError": "continueRegularOutput",
+      "position": [848, 480],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": { "mode": "id", "value": "04Y6TGIEdNDWPCp7" },
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.id }}" }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "status": "completed" }
+        },
+        "matchType": "allConditions"
+      }
+    },
+    {
+      "id": "if-x",
+      "name": "Check if Post to X",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [848, 624],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            { "id": "c-x", "leftValue": "={{ $json.post_to_x }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-to-x",
+      "name": "Post to X (Twitter)",
+      "disabled": true,
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 2,
+      "onError": "continueRegularOutput",
+      "position": [1104, 624],
+      "parameters": { "text": "={{ $json.x_post }}", "additionalFields": {} }
+    },
+    {
+      "id": "if-linkedin",
+      "name": "Check if Post to LinkedIn",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [848, 768],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            { "id": "c-li", "leftValue": "={{ $json.post_to_linkedin }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-to-linkedin",
+      "name": "Post to LinkedIn",
+      "disabled": true,
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "onError": "continueRegularOutput",
+      "position": [1104, 768],
+      "parameters": { "person": "me", "text": "={{ $json.linkedin_post }}", "additionalFields": {} }
+    },
+    {
+      "id": "if-facebook",
+      "name": "Check if Post to Facebook",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [848, 912],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            { "id": "c-fb", "leftValue": "={{ $json.post_to_facebook }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-to-facebook",
+      "name": "Post to Facebook",
+      "disabled": true,
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "onError": "continueRegularOutput",
+      "position": [1104, 912],
+      "parameters": { "httpRequestMethod": "POST", "graphApiVersion": "v19.0", "node": "me/feed", "options": {} }
+    },
+    {
+      "id": "if-instagram",
+      "name": "Check if Post to Instagram",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [848, 1040],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            { "id": "c-ig", "leftValue": "={{ $json.post_to_instagram }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-to-instagram",
+      "name": "Post to Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [1104, 1040],
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v19.0/me/media",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ caption: $json.instagram_caption, image_url: $json.media_url }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "if-threads",
+      "name": "Check if Post to Threads",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [848, 1184],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            { "id": "c-th", "leftValue": "={{ $json.post_to_threads }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-to-threads",
+      "name": "Post to Threads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [1104, 1184],
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/me/threads",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ media_type: 'TEXT', text: $json.threads_post }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "if-youtube",
+      "name": "Check if Post to YouTube",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [848, 1328],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+          "conditions": [
+            { "id": "c-yt", "leftValue": "={{ $json.post_to_youtube }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-to-youtube",
+      "name": "Post to YouTube",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "onError": "continueRegularOutput",
+      "position": [1104, 1328],
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $json.youtube_title }}",
+        "options": {
+          "description": "={{ $json.master_text }}",
+          "tags": "={{ $json.master_hashtags }}"
+        }
+      },
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "EzH2GGVNBZEJ76Qx",
+          "name": "YouTube OAuth2 - AutoPoster"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Social Media Form Trigger": {
+      "main": [[{ "node": "Normalize Form Input", "type": "main", "index": 0 }]]
+    },
+    "Normalize Form Input": {
+      "main": [
+        [
+          { "node": "Enqueue Post to Queue Table", "type": "main", "index": 0 },
+          { "node": "Check if Post to X", "type": "main", "index": 0 },
+          { "node": "Check if Post to LinkedIn", "type": "main", "index": 0 },
+          { "node": "Check if Post to Facebook", "type": "main", "index": 0 },
+          { "node": "Check if Post to Instagram", "type": "main", "index": 0 },
+          { "node": "Check if Post to Threads", "type": "main", "index": 0 },
+          { "node": "Check if Post to YouTube", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Post Queue Every Minute": {
+      "main": [[{ "node": "Fetch Scheduled Posts", "type": "main", "index": 0 }]]
+    },
+    "Fetch Scheduled Posts": {
+      "main": [[{ "node": "Filter Due Posts & Format Content", "type": "main", "index": 0 }]]
+    },
+    "Filter Due Posts & Format Content": {
+      "main": [
+        [
+          { "node": "Mark Post as Completed", "type": "main", "index": 0 },
+          { "node": "Check if Post to X", "type": "main", "index": 0 },
+          { "node": "Check if Post to LinkedIn", "type": "main", "index": 0 },
+          { "node": "Check if Post to Facebook", "type": "main", "index": 0 },
+          { "node": "Check if Post to Instagram", "type": "main", "index": 0 },
+          { "node": "Check if Post to Threads", "type": "main", "index": 0 },
+          { "node": "Check if Post to YouTube", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check if Post to X": {
+      "main": [[{ "node": "Post to X (Twitter)", "type": "main", "index": 0 }]]
+    },
+    "Check if Post to LinkedIn": {
+      "main": [[{ "node": "Post to LinkedIn", "type": "main", "index": 0 }]]
+    },
+    "Check if Post to Facebook": {
+      "main": [[{ "node": "Post to Facebook", "type": "main", "index": 0 }]]
+    },
+    "Check if Post to Instagram": {
+      "main": [[{ "node": "Post to Instagram", "type": "main", "index": 0 }]]
+    },
+    "Check if Post to Threads": {
+      "main": [[{ "node": "Post to Threads", "type": "main", "index": 0 }]]
+    },
+    "Check if Post to YouTube": {
+      "main": [[{ "node": "Post to YouTube", "type": "main", "index": 0 }]]
+    }
+  }
+}
