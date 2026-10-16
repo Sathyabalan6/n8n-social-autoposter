@@ -8,84 +8,71 @@
 </head>
 <body>
 
-  <!-- Top Header Navigation -->
+  <!-- Clean Minimalist Header -->
   <header>
     <div class="logo">
-      <span>🚀 SocialPulse Studio</span>
-      <span class="logo-badge">PRO</span>
+      <span>🚀 SocialPulse</span>
     </div>
 
-    <div class="nav-tabs">
-      <button class="nav-tab active" data-target="tab-wizard">✍️ Create Post</button>
-      <button class="nav-tab" data-target="tab-queue">📋 Queue & History</button>
-      <button class="nav-tab" data-target="tab-clients">🏢 Clients & Brands</button>
+    <!-- Main Navigation Pills -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-target="tab-wizard">✍️ Compose</button>
+      <button class="nav-tab" data-target="tab-queue">📋 Queue</button>
+      <button class="nav-tab" data-target="tab-clients">🏢 Clients</button>
       <button class="nav-tab" data-target="tab-settings">⚙️ Settings</button>
-    </div>
+    </nav>
 
-    <!-- Agency Client Selector -->
-    <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-primary); padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border);">
-      <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">CLIENT:</span>
-      <select id="header-client-select" style="background: transparent; border: none; color: var(--text-primary); font-weight: 600; font-size: 0.85rem; padding: 4px; cursor: pointer; outline: none; width: auto;">
-        <!-- Dynamically loaded -->
-      </select>
-    </div>
+    <!-- Header Client Selector & Status -->
+    <div class="header-right">
+      <div class="client-pill">
+        <span class="client-pill-label">Client:</span>
+        <select id="header-client-select">
+          <!-- Dynamically populated -->
+        </select>
+      </div>
 
-    <div class="status-chips">
-      <div class="status-chip" id="chip-youtube">
+      <div class="status-chip" id="chip-youtube" title="YouTube Status">
         <span class="status-dot" id="dot-youtube"></span>
         <span>YouTube</span>
-      </div>
-      <div class="status-chip" id="chip-x">
-        <span class="status-dot" id="dot-x"></span>
-        <span>X (Twitter)</span>
-      </div>
-      <div class="status-chip" id="chip-linkedin">
-        <span class="status-dot" id="dot-linkedin"></span>
-        <span>LinkedIn</span>
       </div>
     </div>
   </header>
 
   <main>
-    <!-- TAB 1: 3-STEP WIZARD -->
+    <!-- TAB 1: COMPOSE WIZARD -->
     <div id="tab-wizard" class="tab-content active">
       <div class="two-col-layout">
         
         <!-- Left Column: The 3-Step Wizard Form -->
         <div class="wizard-column">
 
-          <!-- STEP 1: CORE CONTENT & PLATFORMS -->
+          <!-- STEP 1: CONTENT & CHANNELS -->
           <div class="card wizard-step" id="step-1">
             <div class="card-header">
-              <h2 class="card-title">Step 1 of 3: Core Post & Channels</h2>
-              <p class="card-subtitle">Draft your central thought, attach default media, and select target channels.</p>
+              <div class="step-indicator">STEP 1 OF 3</div>
+              <h2 class="card-title">Compose Post</h2>
             </div>
 
-            <!-- Client Assignment -->
-            <div class="form-group" style="background: rgba(59, 130, 246, 0.08); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
-              <label class="form-label" for="wizard-client-select" style="color: var(--accent); margin-bottom: 4px;">🏢 Target Client / Brand</label>
-              <select id="wizard-client-select" style="background: var(--bg-primary);">
-                <!-- Populated dynamically -->
-              </select>
-            </div>
+            <!-- Target Client Indicator -->
+            <input type="hidden" id="wizard-client-select">
 
             <div class="form-group">
-              <label class="form-label" for="master_text">Master Post Content / Description</label>
-              <textarea id="master_text" placeholder="What's happening? Share your update, story, or video description..."></textarea>
+              <label class="form-label" for="master_text">Post Text</label>
+              <textarea id="master_text" placeholder="Write your post or description here..."></textarea>
               <div class="char-count" id="master-char-count">0 characters</div>
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="master_hashtags">Master Hashtags <span class="optional">(optional)</span></label>
-              <input type="text" id="master_hashtags" placeholder="e.g. #buildinpublic #automation #tech">
+              <label class="form-label" for="master_hashtags">Hashtags <span class="optional">(optional)</span></label>
+              <input type="text" id="master_hashtags" placeholder="#buildinpublic #tech #automation">
             </div>
 
-            <!-- Master Media Upload Dropzone -->
+            <!-- Master Media Upload -->
             <div class="form-group">
-              <label class="form-label">Master Media Attachment <span class="optional">(Video or Image)</span></label>
+              <label class="form-label">Attach Media <span class="optional">(Video or Image)</span></label>
               <div class="dropzone" id="dropzone-master">
                 <div class="dropzone-icon">📁</div>
-                <div class="dropzone-text">Drag & drop your primary video or image, or <strong>browse files</strong></div>
+                <div class="dropzone-text">Click or drag media here</div>
                 <input type="file" id="media-master-input" style="display: none;" accept="video/*,image/*">
               </div>
               <div class="media-preview-container" id="media-preview-master" style="display: none;">
@@ -93,22 +80,22 @@
               </div>
             </div>
 
-            <!-- Scheduling -->
+            <!-- Publishing Timing -->
             <div class="form-group">
-              <label class="form-label">Publishing Timing</label>
-              <div style="display: flex; gap: 16px; margin-bottom: 8px;">
-                <label style="cursor: pointer;"><input type="radio" name="timing" value="now" checked> Publish Immediately</label>
-                <label style="cursor: pointer;"><input type="radio" name="timing" value="scheduled"> Schedule for Later</label>
+              <label class="form-label">Schedule</label>
+              <div class="timing-toggle-row">
+                <label><input type="radio" name="timing" value="now" checked> Now</label>
+                <label><input type="radio" name="timing" value="scheduled"> Schedule Date & Time</label>
               </div>
-              <div id="schedule-inputs" style="display: none; gap: 12px; margin-top: 8px;">
+              <div id="schedule-inputs" class="schedule-inputs" style="display: none;">
                 <input type="date" id="schedule_date">
                 <input type="time" id="schedule_time" value="14:30">
               </div>
             </div>
 
-            <!-- Platform Checkboxes -->
+            <!-- Target Channels Selection -->
             <div class="form-group">
-              <label class="form-label">Select Target Channels</label>
+              <label class="form-label">Publish To</label>
               <div class="platform-grid">
                 <div class="platform-card selected" data-platform="youtube">
                   <span class="platform-icon">🔴</span>
@@ -116,7 +103,7 @@
                 </div>
                 <div class="platform-card selected" data-platform="x">
                   <span class="platform-icon">🐦</span>
-                  <span>X (Twitter)</span>
+                  <span>X</span>
                 </div>
                 <div class="platform-card selected" data-platform="linkedin">
                   <span class="platform-icon">💼</span>
@@ -139,52 +126,46 @@
 
             <div class="btn-group">
               <div></div>
-              <button class="btn btn-primary" id="btn-goto-step-2">Next: Platform Studios ➔</button>
+              <button class="btn btn-primary" id="btn-goto-step-2">Continue to Customize ➔</button>
             </div>
           </div>
 
-          <!-- STEP 2: DEDICATED PLATFORM STUDIOS (TABBED WORKSPACE) -->
+          <!-- STEP 2: CHANNEL STUDIOS -->
           <div class="card wizard-step" id="step-2" style="display: none;">
             <div class="card-header">
-              <h2 class="card-title">Step 2 of 3: Dedicated Platform Studios</h2>
-              <p class="card-subtitle">Fine-tune copy and change media for each individual channel without clutter.</p>
+              <div class="step-indicator">STEP 2 OF 3</div>
+              <h2 class="card-title">Customize Per Channel</h2>
             </div>
 
-            <!-- Platform Studio Sub-Nav Tabs -->
-            <div class="studio-nav-bar" id="studio-nav-bar">
-              <!-- Dynamically populated based on chosen platforms -->
-            </div>
+            <!-- Dynamic Studio Navigation Bar -->
+            <div class="studio-nav-bar" id="studio-nav-bar"></div>
 
-            <!-- DEDICATED PANEL: YOUTUBE -->
+            <!-- YOUTUBE PANEL -->
             <div class="platform-panel" id="panel-youtube" style="display: none;">
-              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">🔴 YouTube Studio</h3>
-              
               <div class="form-group">
-                <label class="form-label" for="youtube_title">Video Title <span class="optional">(max 100 chars, ideal 50-70)</span></label>
-                <input type="text" id="youtube_title" placeholder="Click-worthy video or Short title">
+                <label class="form-label" for="youtube_title">Video Title</label>
+                <input type="text" id="youtube_title" placeholder="YouTube Video or Short Title">
                 <div class="char-count" id="yt-char-count">0/100</div>
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="youtube_privacy">Video Privacy</label>
+                <label class="form-label" for="youtube_privacy">Privacy</label>
                 <select id="youtube_privacy">
-                  <option value="unlisted" selected>Unlisted (Recommended for test)</option>
+                  <option value="unlisted" selected>Unlisted</option>
                   <option value="public">Public</option>
                   <option value="private">Private</option>
                 </select>
               </div>
 
-              <!-- Media Override for YouTube -->
               <div class="form-group">
-                <label class="form-label">YouTube Video Media</label>
+                <label class="form-label">Media Source</label>
                 <div class="media-toggle-group">
                   <label><input type="radio" name="media_source_youtube" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_youtube" value="custom"> Upload Custom Video for YouTube</label>
+                  <label><input type="radio" name="media_source_youtube" value="custom"> Upload Custom</label>
                   <label><input type="radio" name="media_source_youtube" value="none"> No Media</label>
                 </div>
                 <div id="custom-media-box-youtube" style="display: none;">
                   <div class="dropzone" id="dropzone-youtube">
-                    <div class="dropzone-icon">🎬</div>
                     <div class="dropzone-text">Upload custom YouTube video (.mp4, .mov)</div>
                     <input type="file" id="media-youtube-input" style="display: none;" accept="video/*">
                   </div>
@@ -195,28 +176,24 @@
               </div>
             </div>
 
-            <!-- DEDICATED PANEL: X (TWITTER) -->
+            <!-- X PANEL -->
             <div class="platform-panel" id="panel-x" style="display: none;">
-              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">🐦 X (Twitter) Studio</h3>
-
               <div class="form-group">
-                <label class="form-label" for="x_override">Tweet Copy <span class="optional">(max 280 weighted chars)</span></label>
-                <textarea id="x_override" placeholder="Punchy tweet copy..."></textarea>
+                <label class="form-label" for="x_override">Tweet Text</label>
+                <textarea id="x_override" placeholder="Custom copy for X..."></textarea>
                 <div class="char-count" id="x-char-count">0/280</div>
               </div>
 
-              <!-- Media Override for X -->
               <div class="form-group">
-                <label class="form-label">X Media Attachment</label>
+                <label class="form-label">Media Source</label>
                 <div class="media-toggle-group">
                   <label><input type="radio" name="media_source_x" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_x" value="custom"> Upload Custom Image/Video for X</label>
+                  <label><input type="radio" name="media_source_x" value="custom"> Upload Custom</label>
                   <label><input type="radio" name="media_source_x" value="none"> No Media</label>
                 </div>
                 <div id="custom-media-box-x" style="display: none;">
                   <div class="dropzone" id="dropzone-x">
-                    <div class="dropzone-icon">🖼️</div>
-                    <div class="dropzone-text">Upload custom image/video for X (e.g. 16:9 banner)</div>
+                    <div class="dropzone-text">Upload custom image/video for X</div>
                     <input type="file" id="media-x-input" style="display: none;" accept="video/*,image/*">
                   </div>
                   <div class="media-preview-container" id="media-preview-x" style="display: none;">
@@ -226,28 +203,24 @@
               </div>
             </div>
 
-            <!-- DEDICATED PANEL: LINKEDIN -->
+            <!-- LINKEDIN PANEL -->
             <div class="platform-panel" id="panel-linkedin" style="display: none;">
-              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">💼 LinkedIn Studio</h3>
-
               <div class="form-group">
-                <label class="form-label" for="linkedin_override">LinkedIn Narrative / Story <span class="optional">(max 3,000 chars)</span></label>
-                <textarea id="linkedin_override" placeholder="Professional thought leadership story..."></textarea>
+                <label class="form-label" for="linkedin_override">LinkedIn Post</label>
+                <textarea id="linkedin_override" placeholder="Professional post narrative..."></textarea>
                 <div class="char-count" id="li-char-count">0/3000</div>
               </div>
 
-              <!-- Media Override for LinkedIn -->
               <div class="form-group">
-                <label class="form-label">LinkedIn Media Attachment</label>
+                <label class="form-label">Media Source</label>
                 <div class="media-toggle-group">
                   <label><input type="radio" name="media_source_linkedin" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_linkedin" value="custom"> Upload Custom Media for LinkedIn</label>
+                  <label><input type="radio" name="media_source_linkedin" value="custom"> Upload Custom</label>
                   <label><input type="radio" name="media_source_linkedin" value="none"> No Media</label>
                 </div>
                 <div id="custom-media-box-linkedin" style="display: none;">
                   <div class="dropzone" id="dropzone-linkedin">
-                    <div class="dropzone-icon">📊</div>
-                    <div class="dropzone-text">Upload custom infographic or carousel for LinkedIn</div>
+                    <div class="dropzone-text">Upload custom image, video, or PDF</div>
                     <input type="file" id="media-linkedin-input" style="display: none;" accept="video/*,image/*,application/pdf">
                   </div>
                   <div class="media-preview-container" id="media-preview-linkedin" style="display: none;">
@@ -257,27 +230,23 @@
               </div>
             </div>
 
-            <!-- DEDICATED PANEL: INSTAGRAM -->
+            <!-- INSTAGRAM PANEL -->
             <div class="platform-panel" id="panel-instagram" style="display: none;">
-              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">📸 Instagram Studio</h3>
-
               <div class="form-group">
-                <label class="form-label" for="instagram_override">Instagram Caption <span class="optional">(max 2,200 chars)</span></label>
-                <textarea id="instagram_override" placeholder="Engaging visual caption with hook in first 125 chars..."></textarea>
+                <label class="form-label" for="instagram_override">Caption</label>
+                <textarea id="instagram_override" placeholder="Instagram caption..."></textarea>
               </div>
 
-              <!-- Media Override for Instagram -->
               <div class="form-group">
-                <label class="form-label">Instagram Media Attachment</label>
+                <label class="form-label">Media Source</label>
                 <div class="media-toggle-group">
                   <label><input type="radio" name="media_source_instagram" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_instagram" value="custom"> Upload Custom 4:5 Photo or 9:16 Reel</label>
+                  <label><input type="radio" name="media_source_instagram" value="custom"> Upload Custom</label>
                   <label><input type="radio" name="media_source_instagram" value="none"> No Media</label>
                 </div>
                 <div id="custom-media-box-instagram" style="display: none;">
                   <div class="dropzone" id="dropzone-instagram">
-                    <div class="dropzone-icon">📷</div>
-                    <div class="dropzone-text">Upload custom photo or Reel for Instagram</div>
+                    <div class="dropzone-text">Upload 4:5 image or 9:16 Reel</div>
                     <input type="file" id="media-instagram-input" style="display: none;" accept="video/*,image/*">
                   </div>
                   <div class="media-preview-container" id="media-preview-instagram" style="display: none;">
@@ -287,27 +256,23 @@
               </div>
             </div>
 
-            <!-- DEDICATED PANEL: THREADS -->
+            <!-- THREADS PANEL -->
             <div class="platform-panel" id="panel-threads" style="display: none;">
-              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">🧵 Threads Studio</h3>
-
               <div class="form-group">
-                <label class="form-label" for="threads_override">Threads Body <span class="optional">(max 500 chars)</span></label>
-                <textarea id="threads_override" placeholder="Conversational micro-post..."></textarea>
+                <label class="form-label" for="threads_override">Post Text</label>
+                <textarea id="threads_override" placeholder="Threads post text..."></textarea>
                 <div class="char-count" id="threads-char-count">0/500</div>
               </div>
 
-              <!-- Media Override for Threads -->
               <div class="form-group">
-                <label class="form-label">Threads Media Attachment</label>
+                <label class="form-label">Media Source</label>
                 <div class="media-toggle-group">
                   <label><input type="radio" name="media_source_threads" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_threads" value="custom"> Upload Custom Media for Threads</label>
+                  <label><input type="radio" name="media_source_threads" value="custom"> Upload Custom</label>
                   <label><input type="radio" name="media_source_threads" value="none"> No Media</label>
                 </div>
                 <div id="custom-media-box-threads" style="display: none;">
                   <div class="dropzone" id="dropzone-threads">
-                    <div class="dropzone-icon">🖼️</div>
                     <div class="dropzone-text">Upload custom photo/video for Threads</div>
                     <input type="file" id="media-threads-input" style="display: none;" accept="video/*,image/*">
                   </div>
@@ -318,26 +283,22 @@
               </div>
             </div>
 
-            <!-- DEDICATED PANEL: FACEBOOK -->
+            <!-- FACEBOOK PANEL -->
             <div class="platform-panel" id="panel-facebook" style="display: none;">
-              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">📘 Facebook Page Studio</h3>
-
               <div class="form-group">
-                <label class="form-label" for="facebook_override">Facebook Post Copy</label>
-                <textarea id="facebook_override" placeholder="Page update message..."></textarea>
+                <label class="form-label" for="facebook_override">Page Post</label>
+                <textarea id="facebook_override" placeholder="Facebook post copy..."></textarea>
               </div>
 
-              <!-- Media Override for Facebook -->
               <div class="form-group">
-                <label class="form-label">Facebook Media Attachment</label>
+                <label class="form-label">Media Source</label>
                 <div class="media-toggle-group">
                   <label><input type="radio" name="media_source_facebook" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_facebook" value="custom"> Upload Custom Media for Facebook</label>
+                  <label><input type="radio" name="media_source_facebook" value="custom"> Upload Custom</label>
                   <label><input type="radio" name="media_source_facebook" value="none"> No Media</label>
                 </div>
                 <div id="custom-media-box-facebook" style="display: none;">
                   <div class="dropzone" id="dropzone-facebook">
-                    <div class="dropzone-icon">🖼️</div>
                     <div class="dropzone-text">Upload custom photo/video for Facebook</div>
                     <input type="file" id="media-facebook-input" style="display: none;" accept="video/*,image/*">
                   </div>
@@ -349,21 +310,20 @@
             </div>
 
             <div class="btn-group">
-              <button class="btn btn-secondary" id="btn-backto-step-1">⬅ Back to Step 1</button>
-              <button class="btn btn-primary" id="btn-goto-step-3">Next: Review & Approval ➔</button>
+              <button class="btn btn-secondary" id="btn-backto-step-1">⬅ Back</button>
+              <button class="btn btn-primary" id="btn-goto-step-3">Review & Approve ➔</button>
             </div>
           </div>
 
-          <!-- STEP 3: REVIEW & TEAM APPROVAL -->
+          <!-- STEP 3: REVIEW & APPROVAL -->
           <div class="card wizard-step" id="step-3" style="display: none;">
             <div class="card-header">
-              <h2 class="card-title">Step 3 of 3: Review & Team Approval</h2>
-              <p class="card-subtitle">Verify your post before sending it live to your audience.</p>
+              <div class="step-indicator">STEP 3 OF 3</div>
+              <h2 class="card-title">Review & Approval</h2>
             </div>
 
-            <div class="form-group" style="background: var(--bg-primary); padding: 16px; border-radius: 8px;">
-              <h4 style="margin-bottom: 8px;">📋 Summary Checklist</h4>
-              <ul style="list-style-type: none; font-size: 0.9rem; line-height: 1.8;">
+            <div class="summary-box">
+              <ul class="summary-list">
                 <li id="sum-channels">📡 <strong>Channels:</strong> YouTube, X, LinkedIn</li>
                 <li id="sum-timing">⏰ <strong>Timing:</strong> Immediate</li>
                 <li id="sum-media">📁 <strong>Media:</strong> No media attached</li>
@@ -371,26 +331,26 @@
               </ul>
             </div>
 
-            <div class="form-group" style="margin-top: 20px;">
-              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.95rem; font-weight: 600;">
-                <input type="checkbox" id="approval-checkbox" style="width: 20px; height: 20px;">
-                <span>I have reviewed the content and approve this post to go live</span>
+            <div class="approval-box">
+              <label class="approval-label">
+                <input type="checkbox" id="approval-checkbox">
+                <span>I have reviewed all content and approve this post to go live</span>
               </label>
             </div>
 
             <div class="btn-group">
-              <button class="btn btn-secondary" id="btn-backto-step-2">⬅ Back to Step 2</button>
-              <button class="btn btn-success" id="btn-publish-final" disabled>🚀 Approve & Publish Now</button>
+              <button class="btn btn-secondary" id="btn-backto-step-2">⬅ Back</button>
+              <button class="btn btn-success" id="btn-publish-final" disabled>🚀 Approve & Publish</button>
             </div>
           </div>
 
         </div>
 
-        <!-- Right Column: Live Realistic Social Previews (Auto-Syncing) -->
+        <!-- Right Column: Auto-Syncing Social Previews -->
         <div class="preview-column preview-sticky">
           <div class="preview-tabs" id="preview-tabs-bar">
             <button class="preview-tab active" data-preview="youtube">🔴 YouTube</button>
-            <button class="preview-tab" data-preview="x">🐦 X (Twitter)</button>
+            <button class="preview-tab" data-preview="x">🐦 X</button>
             <button class="preview-tab" data-preview="linkedin">💼 LinkedIn</button>
             <button class="preview-tab" data-preview="instagram">📸 Instagram</button>
             <button class="preview-tab" data-preview="threads">🧵 Threads</button>
@@ -433,7 +393,7 @@
               <div class="yt-desc-box" id="yt-preview-desc">Video description will appear here...</div>
             </div>
 
-            <!-- X (Twitter) Preview Card -->
+            <!-- X Preview Card -->
             <div class="social-card x-mockup preview-card" id="card-x" style="display: none;">
               <div class="x-card">
                 <div class="x-avatar">S</div>
@@ -617,8 +577,8 @@
       <div class="card">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h2 class="card-title">📋 Posts Queue & History</h2>
-            <p class="card-subtitle">Stored permanently in local SQLite (`posts.sqlite`). 0 external database servers.</p>
+            <h2 class="card-title">📋 Posts Queue</h2>
+            <p class="card-subtitle">Scheduled and published posts for the active client.</p>
           </div>
           <button class="btn btn-secondary" id="btn-refresh-queue">🔄 Refresh</button>
         </div>
@@ -643,29 +603,29 @@
       </div>
     </div>
 
-    <!-- TAB 3: CLIENTS & BRANDS (AGENCY WORKSPACE) -->
+    <!-- TAB 3: CLIENTS & BRANDS -->
     <div id="tab-clients" class="tab-content" style="display: none;">
       <div class="card">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h2 class="card-title">🏢 Client Clusters & Connected Accounts</h2>
-            <p class="card-subtitle">Manage client profiles and their dedicated clusters of social channels.</p>
+            <h2 class="card-title">🏢 Client Clusters</h2>
+            <p class="card-subtitle">Manage client profiles and link dedicated social channels.</p>
           </div>
-          <button class="btn btn-primary" id="btn-add-client" style="padding: 8px 16px; font-size: 0.85rem;">+ Add New Client</button>
+          <button class="btn btn-primary" id="btn-add-client" style="padding: 8px 16px; font-size: 0.85rem;">+ Add Client</button>
         </div>
 
-        <!-- Add Client Modal/Inline Form -->
+        <!-- Add Client Inline Form -->
         <div id="add-client-form" style="display: none; background: var(--bg-primary); padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border);">
           <h4 style="margin-bottom: 12px;">Add New Client / Brand</h4>
           <div style="display: flex; gap: 12px; align-items: center;">
-            <input type="text" id="new-client-name" placeholder="Client Name (e.g. Nike Athletics, Apex Dental)" style="flex: 1;">
-            <input type="color" id="new-client-color" value="#3B82F6" style="width: 48px; height: 42px; border-radius: 6px; padding: 2px; cursor: pointer;">
-            <button class="btn btn-success" id="btn-save-new-client">Save Client</button>
+            <input type="text" id="new-client-name" placeholder="Client Name (e.g. Nike Running, Apex Dental)" style="flex: 1;">
+            <input type="color" id="new-client-color" value="#3B82F6" style="width: 44px; height: 42px; border-radius: 6px; padding: 2px; cursor: pointer;">
+            <button class="btn btn-success" id="btn-save-new-client">Save</button>
             <button class="btn btn-secondary" id="btn-cancel-new-client">Cancel</button>
           </div>
         </div>
 
-        <div id="clients-list-container" style="display: grid; gap: 16px;">
+        <div id="clients-list-container" style="display: grid; gap: 14px;">
           <!-- Loaded dynamically -->
         </div>
       </div>
@@ -676,7 +636,7 @@
       <div class="card">
         <div class="card-header">
           <h2 class="card-title">⚙️ Platform Integrations</h2>
-          <p class="card-subtitle">Connect your accounts. All tokens are encrypted and stored locally.</p>
+          <p class="card-subtitle">All tokens are AES-256-GCM encrypted and stored in local SQLite.</p>
         </div>
 
         <div style="display: grid; gap: 16px;">
@@ -684,7 +644,7 @@
           <div style="background: var(--bg-primary); padding: 16px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
             <div>
               <h3 style="display: flex; align-items: center; gap: 8px;">🔴 YouTube Data API v3</h3>
-              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">Upload standard videos and vertical YouTube Shorts directly.</p>
+              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">Upload standard videos and vertical YouTube Shorts.</p>
               <div id="yt-auth-status" style="font-size: 0.8rem; margin-top: 6px; color: var(--warning);">Checking connection...</div>
             </div>
             <div>
@@ -692,10 +652,10 @@
             </div>
           </div>
 
-          <!-- X (Twitter) Settings Card -->
+          <!-- X Settings Card -->
           <div style="background: var(--bg-primary); padding: 16px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
             <div>
-              <h3 style="display: flex; align-items: center; gap: 8px;">🐦 X / Twitter API v2</h3>
+              <h3 style="display: flex; align-items: center; gap: 8px;">🐦 X (Twitter) API v2</h3>
               <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">Configured via X_API_KEY in `.env`.</p>
             </div>
             <div>
