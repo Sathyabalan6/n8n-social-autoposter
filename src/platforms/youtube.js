@@ -27,7 +27,8 @@ function getStoredTokens() {
 }
 
 function saveTokens(tokens) {
-  db.setSetting('youtube_tokens', tokens);
+  // Store encrypted using AES-256-GCM envelope encryption
+  db.setSetting('youtube_tokens', tokens, true);
 }
 
 function getAuthUrl() {
@@ -72,7 +73,20 @@ async function publishYouTube(post) {
   const oauth2Client = getOAuth2Client();
   oauth2Client.setCredentials(tokens);
 
-  // Auto-listen for refreshed tokens
+  // Proactive Token Refresh: If token expires within 5 minutes, refresh proactively before upload
+  if (tokens.refresh_token && tokens.expiry_date && (Date.now() + 300000 > tokens.expiry_date)) {
+    try {
+      console.log('[YouTube Adapter] Proactive token refresh (T-5 min window)...');
+      const refreshed = await oauth2Client.refreshAccessToken();
+      const newCreds = { ...tokens, ...refreshed.credentials };
+      saveTokens(newCreds);
+      oauth2Client.setCredentials(newCreds);
+    } catch (refreshErr) {
+      console.warn('[YouTube Adapter] Proactive refresh attempt error:', refreshErr.message);
+    }
+  }
+
+  // Auto-listen for refreshed tokens during requests
   oauth2Client.on('tokens', (newTokens) => {
     const updated = { ...tokens, ...newTokens };
     saveTokens(updated);

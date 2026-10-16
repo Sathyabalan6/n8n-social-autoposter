@@ -144,8 +144,10 @@ async function dispatchPost(post) {
   const platforms = Array.isArray(post.platforms) ? post.platforms : [];
   const results = {};
   const errors = [];
+  const successes = [];
 
-  for (const p of platforms) {
+  // Concurrent multi-channel dispatching via Promise.allSettled
+  const dispatchPromises = platforms.map(async (p) => {
     const key = p.toLowerCase();
     try {
       let res;
@@ -164,19 +166,39 @@ async function dispatchPost(post) {
       } else {
         res = { platform: p, success: false, error: `Unsupported platform: ${p}` };
       }
-
-      results[key] = res;
-      if (!res.success) {
-        errors.push(`${p}: ${res.error}`);
-      }
+      return { platformKey: key, platformName: p, res };
     } catch (err) {
-      results[key] = { platform: p, success: false, error: err.message };
-      errors.push(`${p}: ${err.message}`);
+      return { platformKey: key, platformName: p, res: { platform: p, success: false, error: err.message } };
     }
+  });
+
+  const settled = await Promise.allSettled(dispatchPromises);
+
+  for (const item of settled) {
+    if (item.status === 'fulfilled') {
+      const { platformKey, platformName, res } = item.value;
+      results[platformKey] = res;
+      if (res.success) {
+        successes.push(platformName);
+      } else {
+        errors.push(`${platformName}: ${res.error}`);
+      }
+    } else {
+      errors.push(`Unhandled rejection: ${item.reason?.message || item.reason}`);
+    }
+  }
+
+  // Determine DAG State Machine outcome
+  let finalStatus = 'completed';
+  if (successes.length === 0 && errors.length > 0) {
+    finalStatus = 'failed';
+  } else if (successes.length > 0 && errors.length > 0) {
+    finalStatus = 'partially_completed';
   }
 
   return {
     results,
+    finalStatus,
     hasErrors: errors.length > 0,
     errorSummary: errors.join(' | ')
   };

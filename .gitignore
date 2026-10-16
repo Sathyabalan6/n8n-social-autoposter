@@ -6,6 +6,8 @@
 *.sqlite
 *.sqlite3
 *.db
+*.sqlite-wal
+*.sqlite-shm
 
 # Media uploads
 uploads/
@@ -18,8 +20,9 @@ public/uploads/
 *.png
 *.webp
 
-# Dependencies & OS files
+# Dependencies, Logs & OS files
 node_modules/
+*.log
 .DS_Store
 Thumbs.db
 npm-debug.log*

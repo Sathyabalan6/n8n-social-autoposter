@@ -7,33 +7,26 @@
 const db = require('./db');
 const { dispatchPost } = require('./platforms');
 
-let isRunning = false;
+const workerId = `worker-${process.pid}-${Math.round(Math.random() * 1e6)}`;
 let timerId = null;
 
 async function checkAndProcessDuePosts() {
-  if (isRunning) return; // Prevent concurrent overlap
-  isRunning = true;
-
   try {
-    const duePosts = db.getDuePosts();
-    if (duePosts.length > 0) {
-      console.log(`[Scheduler] Found ${duePosts.length} due post(s) to process.`);
-    }
+    let job = db.claimNextJob(workerId, 45000); // 45s atomic lease lock
 
-    for (const post of duePosts) {
-      console.log(`[Scheduler] Processing Post #${post.id} scheduled for ${post.scheduled_at}...`);
-      db.updatePostStatus(post.id, 'processing');
+    while (job) {
+      console.log(`[Scheduler] ${workerId} atomically claimed Job #${job.id} (Attempt ${job.attempts})`);
 
-      const { results, hasErrors, errorSummary } = await dispatchPost(post);
-      const finalStatus = hasErrors ? 'failed' : 'completed';
+      const { results, finalStatus, errorSummary } = await dispatchPost(job);
+      db.updatePostStatus(job.id, finalStatus, results, errorSummary);
 
-      db.updatePostStatus(post.id, finalStatus, results, errorSummary);
-      console.log(`[Scheduler] Post #${post.id} finished with status: ${finalStatus}`);
+      console.log(`[Scheduler] Job #${job.id} resolved with status: ${finalStatus}`);
+
+      // Claim next available job in queue
+      job = db.claimNextJob(workerId, 45000);
     }
   } catch (err) {
-    console.error('[Scheduler] Error checking due posts:', err);
-  } finally {
-    isRunning = false;
+    console.error('[Scheduler] Queue processing error:', err.message);
   }
 }
 

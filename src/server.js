@@ -109,8 +109,8 @@ app.post('/api/posts', upload.single('media'), async (req, res) => {
 
     // If immediate, dispatch right away!
     if (!compiled.is_scheduled) {
-      const { results, hasErrors, errorSummary } = await dispatchPost(postRecord);
-      postRecord.status = hasErrors ? 'failed' : 'completed';
+      const { results, finalStatus, errorSummary } = await dispatchPost(postRecord);
+      postRecord.status = finalStatus;
       postRecord.results = results;
       postRecord.error_summary = errorSummary;
     } else {
