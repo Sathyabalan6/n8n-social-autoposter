@@ -62,7 +62,10 @@ async function publishYouTube(post) {
     };
   }
 
-  if (!post.media_path || !fs.existsSync(post.media_path)) {
+  // Support per-platform media override: check post.media_overrides?.youtube first
+  const mediaPath = post.media_overrides?.youtube?.path || post.media_path;
+
+  if (!mediaPath || !fs.existsSync(mediaPath)) {
     return {
       platform: 'youtube',
       success: false,
@@ -112,7 +115,7 @@ async function publishYouTube(post) {
   };
 
   const media = {
-    body: fs.createReadStream(post.media_path)
+    body: fs.createReadStream(mediaPath)
   };
 
   try {

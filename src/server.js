@@ -21,8 +21,8 @@ if (!fs.existsSync(uploadDir)) {
 
 // Multer storage
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname);
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     cb(null, `${unique}${ext}`);
@@ -32,6 +32,15 @@ const upload = multer({
   storage,
   limits: { fileSize: 500 * 1024 * 1024 } // 500MB max
 });
+const uploadFields = upload.fields([
+  { name: 'media', maxCount: 1 },
+  { name: 'media_youtube', maxCount: 1 },
+  { name: 'media_x', maxCount: 1 },
+  { name: 'media_linkedin', maxCount: 1 },
+  { name: 'media_instagram', maxCount: 1 },
+  { name: 'media_threads', maxCount: 1 },
+  { name: 'media_facebook', maxCount: 1 }
+]);
 
 // Middleware
 app.use(express.json());
@@ -41,7 +50,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // --- API ROUTES ---
 
 // 1. Health check & status
-app.get('/api/status', (req, res) => {
+app.get('/api/status', (_req, res) => {
   const ytTokens = getStoredTokens();
   res.json({
     status: 'ok',
@@ -71,7 +80,7 @@ app.post('/api/compile', (req, res) => {
 });
 
 // 3. Create / Submit Post (Immediate or Scheduled)
-app.post('/api/posts', upload.single('media'), async (req, res) => {
+app.post('/api/posts', uploadFields, async (req, res) => {
   try {
     const body = req.body;
     let platforms = [];
@@ -94,17 +103,33 @@ app.post('/api/posts', upload.single('media'), async (req, res) => {
     let mediaFilename = '';
     let mediaMimetype = '';
 
-    if (req.file) {
-      mediaPath = req.file.path;
-      mediaFilename = req.file.originalname;
-      mediaMimetype = req.file.mimetype;
+    const files = req.files || {};
+    if (files.media && files.media[0]) {
+      mediaPath = files.media[0].path;
+      mediaFilename = files.media[0].originalname;
+      mediaMimetype = files.media[0].mimetype;
+    }
+
+    // Process per-platform media overrides
+    const mediaOverrides = {};
+    const platformKeys = ['youtube', 'x', 'linkedin', 'instagram', 'threads', 'facebook'];
+    for (const key of platformKeys) {
+      const fieldKey = `media_${key}`;
+      if (files[fieldKey] && files[fieldKey][0]) {
+        mediaOverrides[key] = {
+          path: files[fieldKey][0].path,
+          filename: files[fieldKey][0].originalname,
+          mimetype: files[fieldKey][0].mimetype
+        };
+      }
     }
 
     const postRecord = {
       ...compiled,
       media_path: mediaPath,
       media_filename: mediaFilename,
-      media_mimetype: mediaMimetype
+      media_mimetype: mediaMimetype,
+      media_overrides: mediaOverrides
     };
 
     // If immediate, dispatch right away!
@@ -134,7 +159,7 @@ app.post('/api/posts', upload.single('media'), async (req, res) => {
 });
 
 // 4. List all posts (Queue & History)
-app.get('/api/posts', (req, res) => {
+app.get('/api/posts', (_req, res) => {
   try {
     const posts = db.getAllPosts();
     res.json({ success: true, posts });

@@ -49,7 +49,7 @@
           <div class="card wizard-step" id="step-1">
             <div class="card-header">
               <h2 class="card-title">Step 1 of 3: Core Post & Channels</h2>
-              <p class="card-subtitle">Draft your central thought, attach media, and choose target platforms.</p>
+              <p class="card-subtitle">Draft your central thought, attach default media, and select target channels.</p>
             </div>
 
             <div class="form-group">
@@ -63,16 +63,16 @@
               <input type="text" id="master_hashtags" placeholder="e.g. #buildinpublic #automation #tech">
             </div>
 
-            <!-- Media Upload Dropzone -->
+            <!-- Master Media Upload Dropzone -->
             <div class="form-group">
               <label class="form-label">Master Media Attachment <span class="optional">(Video or Image)</span></label>
-              <div class="dropzone" id="dropzone">
+              <div class="dropzone" id="dropzone-master">
                 <div class="dropzone-icon">📁</div>
-                <div class="dropzone-text">Drag & drop your video or image here, or <strong>browse files</strong></div>
-                <input type="file" id="media-file-input" style="display: none;" accept="video/*,image/*">
+                <div class="dropzone-text">Drag & drop your primary video or image, or <strong>browse files</strong></div>
+                <input type="file" id="media-master-input" style="display: none;" accept="video/*,image/*">
               </div>
-              <div class="media-preview-container" id="media-preview-container" style="display: none;">
-                <button class="btn-remove-media" id="btn-remove-media">✕ Remove</button>
+              <div class="media-preview-container" id="media-preview-master" style="display: none;">
+                <button class="btn-remove-media" id="btn-remove-master-media">✕ Remove</button>
               </div>
             </div>
 
@@ -122,57 +122,207 @@
 
             <div class="btn-group">
               <div></div>
-              <button class="btn btn-primary" id="btn-goto-step-2">Next: Platform Fine-Tuning ➔</button>
+              <button class="btn btn-primary" id="btn-goto-step-2">Next: Platform Studios ➔</button>
             </div>
           </div>
 
-          <!-- STEP 2: PLATFORM FINE-TUNING -->
+          <!-- STEP 2: DEDICATED PLATFORM STUDIOS (TABBED WORKSPACE) -->
           <div class="card wizard-step" id="step-2" style="display: none;">
             <div class="card-header">
-              <h2 class="card-title">Step 2 of 3: Platform Fine-Tuning</h2>
-              <p class="card-subtitle">Customize copy for individual platforms. Leave empty to use auto-adapted master copy.</p>
+              <h2 class="card-title">Step 2 of 3: Dedicated Platform Studios</h2>
+              <p class="card-subtitle">Fine-tune copy and change media for each individual channel without clutter.</p>
             </div>
 
-            <!-- YouTube Customization -->
-            <div class="form-group platform-section" id="section-youtube">
-              <label class="form-label" for="youtube_title">🔴 YouTube Video Title</label>
-              <input type="text" id="youtube_title" placeholder="Click-worthy video or Short title (max 100 chars)">
-              <div class="char-count" id="yt-char-count">0/100</div>
+            <!-- Platform Studio Sub-Nav Tabs -->
+            <div class="studio-nav-bar" id="studio-nav-bar">
+              <!-- Dynamically populated based on chosen platforms -->
+            </div>
 
-              <div style="margin-top: 8px;">
-                <label class="form-label" for="youtube_privacy">Privacy Status</label>
+            <!-- DEDICATED PANEL: YOUTUBE -->
+            <div class="platform-panel" id="panel-youtube" style="display: none;">
+              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">🔴 YouTube Studio</h3>
+              
+              <div class="form-group">
+                <label class="form-label" for="youtube_title">Video Title <span class="optional">(max 100 chars, ideal 50-70)</span></label>
+                <input type="text" id="youtube_title" placeholder="Click-worthy video or Short title">
+                <div class="char-count" id="yt-char-count">0/100</div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="youtube_privacy">Video Privacy</label>
                 <select id="youtube_privacy">
                   <option value="unlisted" selected>Unlisted (Recommended for test)</option>
                   <option value="public">Public</option>
                   <option value="private">Private</option>
                 </select>
               </div>
+
+              <!-- Media Override for YouTube -->
+              <div class="form-group">
+                <label class="form-label">YouTube Video Media</label>
+                <div class="media-toggle-group">
+                  <label><input type="radio" name="media_source_youtube" value="master" checked> Use Master Media</label>
+                  <label><input type="radio" name="media_source_youtube" value="custom"> Upload Custom Video for YouTube</label>
+                </div>
+                <div id="custom-media-box-youtube" style="display: none;">
+                  <div class="dropzone" id="dropzone-youtube">
+                    <div class="dropzone-icon">🎬</div>
+                    <div class="dropzone-text">Upload custom YouTube video (.mp4, .mov)</div>
+                    <input type="file" id="media-youtube-input" style="display: none;" accept="video/*">
+                  </div>
+                  <div class="media-preview-container" id="media-preview-youtube" style="display: none;">
+                    <button class="btn-remove-media" id="btn-remove-youtube-media">✕ Remove</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- X Customization -->
-            <div class="form-group platform-section" id="section-x">
-              <label class="form-label" for="x_override">🐦 X (Twitter) Copy <span class="optional">(max 280 chars)</span></label>
-              <textarea id="x_override" placeholder="Punchy tweet copy..."></textarea>
-              <div class="char-count" id="x-char-count">0/280</div>
+            <!-- DEDICATED PANEL: X (TWITTER) -->
+            <div class="platform-panel" id="panel-x" style="display: none;">
+              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">🐦 X (Twitter) Studio</h3>
+
+              <div class="form-group">
+                <label class="form-label" for="x_override">Tweet Copy <span class="optional">(max 280 weighted chars)</span></label>
+                <textarea id="x_override" placeholder="Punchy tweet copy..."></textarea>
+                <div class="char-count" id="x-char-count">0/280</div>
+              </div>
+
+              <!-- Media Override for X -->
+              <div class="form-group">
+                <label class="form-label">X Media Attachment</label>
+                <div class="media-toggle-group">
+                  <label><input type="radio" name="media_source_x" value="master" checked> Use Master Media</label>
+                  <label><input type="radio" name="media_source_x" value="custom"> Upload Custom Image/Video for X</label>
+                </div>
+                <div id="custom-media-box-x" style="display: none;">
+                  <div class="dropzone" id="dropzone-x">
+                    <div class="dropzone-icon">🖼️</div>
+                    <div class="dropzone-text">Upload custom image/video for X (e.g. 16:9 banner)</div>
+                    <input type="file" id="media-x-input" style="display: none;" accept="video/*,image/*">
+                  </div>
+                  <div class="media-preview-container" id="media-preview-x" style="display: none;">
+                    <button class="btn-remove-media" id="btn-remove-x-media">✕ Remove</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- LinkedIn Customization -->
-            <div class="form-group platform-section" id="section-linkedin">
-              <label class="form-label" for="linkedin_override">💼 LinkedIn Story <span class="optional">(max 3,000 chars)</span></label>
-              <textarea id="linkedin_override" placeholder="Professional narrative and thought leadership..."></textarea>
-              <div class="char-count" id="li-char-count">0/3000</div>
+            <!-- DEDICATED PANEL: LINKEDIN -->
+            <div class="platform-panel" id="panel-linkedin" style="display: none;">
+              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">💼 LinkedIn Studio</h3>
+
+              <div class="form-group">
+                <label class="form-label" for="linkedin_override">LinkedIn Narrative / Story <span class="optional">(max 3,000 chars)</span></label>
+                <textarea id="linkedin_override" placeholder="Professional thought leadership story..."></textarea>
+                <div class="char-count" id="li-char-count">0/3000</div>
+              </div>
+
+              <!-- Media Override for LinkedIn -->
+              <div class="form-group">
+                <label class="form-label">LinkedIn Media Attachment</label>
+                <div class="media-toggle-group">
+                  <label><input type="radio" name="media_source_linkedin" value="master" checked> Use Master Media</label>
+                  <label><input type="radio" name="media_source_linkedin" value="custom"> Upload Custom Media for LinkedIn</label>
+                </div>
+                <div id="custom-media-box-linkedin" style="display: none;">
+                  <div class="dropzone" id="dropzone-linkedin">
+                    <div class="dropzone-icon">📊</div>
+                    <div class="dropzone-text">Upload custom infographic or carousel for LinkedIn</div>
+                    <input type="file" id="media-linkedin-input" style="display: none;" accept="video/*,image/*,application/pdf">
+                  </div>
+                  <div class="media-preview-container" id="media-preview-linkedin" style="display: none;">
+                    <button class="btn-remove-media" id="btn-remove-linkedin-media">✕ Remove</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- Instagram Customization -->
-            <div class="form-group platform-section" id="section-instagram">
-              <label class="form-label" for="instagram_override">📸 Instagram Caption</label>
-              <textarea id="instagram_override" placeholder="Engaging visual caption with first-line hook..."></textarea>
+            <!-- DEDICATED PANEL: INSTAGRAM -->
+            <div class="platform-panel" id="panel-instagram" style="display: none;">
+              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">📸 Instagram Studio</h3>
+
+              <div class="form-group">
+                <label class="form-label" for="instagram_override">Instagram Caption <span class="optional">(max 2,200 chars)</span></label>
+                <textarea id="instagram_override" placeholder="Engaging visual caption with hook in first 125 chars..."></textarea>
+              </div>
+
+              <!-- Media Override for Instagram -->
+              <div class="form-group">
+                <label class="form-label">Instagram Media Attachment</label>
+                <div class="media-toggle-group">
+                  <label><input type="radio" name="media_source_instagram" value="master" checked> Use Master Media</label>
+                  <label><input type="radio" name="media_source_instagram" value="custom"> Upload Custom 4:5 Photo or 9:16 Reel</label>
+                </div>
+                <div id="custom-media-box-instagram" style="display: none;">
+                  <div class="dropzone" id="dropzone-instagram">
+                    <div class="dropzone-icon">📷</div>
+                    <div class="dropzone-text">Upload custom photo or Reel for Instagram</div>
+                    <input type="file" id="media-instagram-input" style="display: none;" accept="video/*,image/*">
+                  </div>
+                  <div class="media-preview-container" id="media-preview-instagram" style="display: none;">
+                    <button class="btn-remove-media" id="btn-remove-instagram-media">✕ Remove</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- Threads Customization -->
-            <div class="form-group platform-section" id="section-threads">
-              <label class="form-label" for="threads_override">🧵 Threads Copy <span class="optional">(max 500 chars)</span></label>
-              <textarea id="threads_override" placeholder="Conversational text. Single topic tag extracted automatically..."></textarea>
+            <!-- DEDICATED PANEL: THREADS -->
+            <div class="platform-panel" id="panel-threads" style="display: none;">
+              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">🧵 Threads Studio</h3>
+
+              <div class="form-group">
+                <label class="form-label" for="threads_override">Threads Body <span class="optional">(max 500 chars)</span></label>
+                <textarea id="threads_override" placeholder="Conversational micro-post..."></textarea>
+                <div class="char-count" id="threads-char-count">0/500</div>
+              </div>
+
+              <!-- Media Override for Threads -->
+              <div class="form-group">
+                <label class="form-label">Threads Media Attachment</label>
+                <div class="media-toggle-group">
+                  <label><input type="radio" name="media_source_threads" value="master" checked> Use Master Media</label>
+                  <label><input type="radio" name="media_source_threads" value="custom"> Upload Custom Media for Threads</label>
+                </div>
+                <div id="custom-media-box-threads" style="display: none;">
+                  <div class="dropzone" id="dropzone-threads">
+                    <div class="dropzone-icon">🖼️</div>
+                    <div class="dropzone-text">Upload custom photo/video for Threads</div>
+                    <input type="file" id="media-threads-input" style="display: none;" accept="video/*,image/*">
+                  </div>
+                  <div class="media-preview-container" id="media-preview-threads" style="display: none;">
+                    <button class="btn-remove-media" id="btn-remove-threads-media">✕ Remove</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- DEDICATED PANEL: FACEBOOK -->
+            <div class="platform-panel" id="panel-facebook" style="display: none;">
+              <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">📘 Facebook Page Studio</h3>
+
+              <div class="form-group">
+                <label class="form-label" for="facebook_override">Facebook Post Copy</label>
+                <textarea id="facebook_override" placeholder="Page update message..."></textarea>
+              </div>
+
+              <!-- Media Override for Facebook -->
+              <div class="form-group">
+                <label class="form-label">Facebook Media Attachment</label>
+                <div class="media-toggle-group">
+                  <label><input type="radio" name="media_source_facebook" value="master" checked> Use Master Media</label>
+                  <label><input type="radio" name="media_source_facebook" value="custom"> Upload Custom Media for Facebook</label>
+                </div>
+                <div id="custom-media-box-facebook" style="display: none;">
+                  <div class="dropzone" id="dropzone-facebook">
+                    <div class="dropzone-icon">🖼️</div>
+                    <div class="dropzone-text">Upload custom photo/video for Facebook</div>
+                    <input type="file" id="media-facebook-input" style="display: none;" accept="video/*,image/*">
+                  </div>
+                  <div class="media-preview-container" id="media-preview-facebook" style="display: none;">
+                    <button class="btn-remove-media" id="btn-remove-facebook-media">✕ Remove</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="btn-group">
@@ -213,14 +363,15 @@
 
         </div>
 
-        <!-- Right Column: Live Realistic Social Previews -->
+        <!-- Right Column: Live Realistic Social Previews (Auto-Syncing) -->
         <div class="preview-column preview-sticky">
-          <div class="preview-tabs">
+          <div class="preview-tabs" id="preview-tabs-bar">
             <button class="preview-tab active" data-preview="youtube">🔴 YouTube</button>
             <button class="preview-tab" data-preview="x">🐦 X (Twitter)</button>
             <button class="preview-tab" data-preview="linkedin">💼 LinkedIn</button>
-            <button class="preview-tab" data-preview="threads">🧵 Threads</button>
             <button class="preview-tab" data-preview="instagram">📸 Instagram</button>
+            <button class="preview-tab" data-preview="threads">🧵 Threads</button>
+            <button class="preview-tab" data-preview="facebook">📘 Facebook</button>
           </div>
 
           <!-- Device Shell -->
@@ -271,18 +422,6 @@
               <div class="x-media-box" id="li-preview-media" style="display: none; margin-top: 10px;"></div>
             </div>
 
-            <!-- Threads Preview Card -->
-            <div class="social-card threads-mockup preview-card" id="card-threads" style="display: none;">
-              <div class="x-header">
-                <div class="x-avatar" style="background: #333;">S</div>
-                <div style="flex: 1;">
-                  <div style="font-weight: 600; font-size: 0.95rem;">sathyabalan</div>
-                  <div class="x-text" id="threads-preview-text">Threads update preview...</div>
-                  <div class="topic-pill" id="threads-topic-pill">#topic</div>
-                </div>
-              </div>
-            </div>
-
             <!-- Instagram Preview Card -->
             <div class="social-card preview-card" id="card-instagram" style="display: none; background: #000;">
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
@@ -296,6 +435,32 @@
                 <span style="font-weight: 600;">sathyabalan</span>
                 <span id="ig-preview-caption" style="color: #ccc; margin-left: 6px;">Instagram caption...</span>
               </div>
+            </div>
+
+            <!-- Threads Preview Card -->
+            <div class="social-card threads-mockup preview-card" id="card-threads" style="display: none;">
+              <div class="x-header">
+                <div class="x-avatar" style="background: #333;">S</div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; font-size: 0.95rem;">sathyabalan</div>
+                  <div class="x-text" id="threads-preview-text">Threads update preview...</div>
+                  <div class="x-media-box" id="threads-preview-media" style="display: none; margin-top: 8px;"></div>
+                  <div class="topic-pill" id="threads-topic-pill">#topic</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Facebook Preview Card -->
+            <div class="social-card fb-mockup preview-card" id="card-facebook" style="display: none;">
+              <div class="fb-header">
+                <div class="fb-avatar">S</div>
+                <div>
+                  <div style="font-weight: 600; font-size: 0.95rem;">Sathya Balan</div>
+                  <div style="font-size: 0.75rem; color: #b0b3b8;">Just now · 🌍</div>
+                </div>
+              </div>
+              <div class="x-text" id="fb-preview-text" style="margin-top: 10px;">Facebook post copy...</div>
+              <div class="x-media-box" id="fb-preview-media" style="display: none; margin-top: 10px;"></div>
             </div>
 
           </div>

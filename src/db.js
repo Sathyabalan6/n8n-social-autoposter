@@ -29,6 +29,7 @@ db.exec(`
     media_path TEXT,
     media_filename TEXT,
     media_mimetype TEXT,
+    media_overrides TEXT,
     platforms TEXT NOT NULL,
     youtube_title TEXT,
     youtube_tags TEXT,
@@ -53,16 +54,21 @@ db.exec(`
   );
 `);
 
-// Safe migrations for existing databases
-try {
-  db.exec(`
-    ALTER TABLE posts ADD COLUMN first_comment TEXT;
-    ALTER TABLE posts ADD COLUMN worker_id TEXT;
-    ALTER TABLE posts ADD COLUMN locked_until INTEGER DEFAULT 0;
-    ALTER TABLE posts ADD COLUMN attempts INTEGER DEFAULT 0;
-  `);
-} catch {
-  // Columns already exist
+// Safe migrations for existing databases (run individually so one existing column doesn't block the rest)
+const migrations = [
+  'ALTER TABLE posts ADD COLUMN first_comment TEXT;',
+  'ALTER TABLE posts ADD COLUMN worker_id TEXT;',
+  'ALTER TABLE posts ADD COLUMN locked_until INTEGER DEFAULT 0;',
+  'ALTER TABLE posts ADD COLUMN attempts INTEGER DEFAULT 0;',
+  'ALTER TABLE posts ADD COLUMN media_overrides TEXT;'
+];
+
+for (const sql of migrations) {
+  try {
+    db.exec(sql);
+  } catch {
+    // Column already exists or table already updated
+  }
 }
 
 try {
@@ -83,13 +89,13 @@ function safeJsonParse(jsonString, fallback) {
 const stmtInsert = db.prepare(`
   INSERT INTO posts (
     status, scheduled_at, created_at, updated_at, master_text, master_hashtags,
-    media_path, media_filename, media_mimetype, platforms,
+    media_path, media_filename, media_mimetype, media_overrides, platforms,
     youtube_title, youtube_tags, youtube_privacy,
     x_post, linkedin_post, instagram_caption, threads_post, facebook_post,
     results, error_summary, first_comment, attempts
   ) VALUES (
     ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?,
+    ?, ?, ?, ?, ?,
     ?, ?, ?,
     ?, ?, ?, ?, ?,
     ?, ?, ?, ?
@@ -118,6 +124,7 @@ module.exports = {
       post.media_path || '',
       post.media_filename || '',
       post.media_mimetype || '',
+      JSON.stringify(post.media_overrides || {}),
       JSON.stringify(post.platforms || []),
       post.youtube_title || '',
       post.youtube_tags || '',
@@ -138,6 +145,7 @@ module.exports = {
     const rows = stmtGetAll.all();
     return rows.map(r => ({
       ...r,
+      media_overrides: safeJsonParse(r.media_overrides, {}),
       platforms: safeJsonParse(r.platforms, []),
       results: safeJsonParse(r.results, {})
     }));
@@ -147,6 +155,7 @@ module.exports = {
     if (!row) return null;
     return {
       ...row,
+      media_overrides: safeJsonParse(row.media_overrides, {}),
       platforms: safeJsonParse(row.platforms, []),
       results: safeJsonParse(row.results, {})
     };
@@ -190,6 +199,7 @@ module.exports = {
     const job = stmtGetById.get(candidate.id);
     return {
       ...job,
+      media_overrides: safeJsonParse(job.media_overrides, {}),
       platforms: safeJsonParse(job.platforms, []),
       results: safeJsonParse(job.results, {})
     };

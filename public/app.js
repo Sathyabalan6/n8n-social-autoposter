@@ -1,11 +1,27 @@
 // --- STATE MANAGEMENT ---
 const state = {
   selectedPlatforms: ['youtube', 'x', 'linkedin'],
-  mediaFile: null,
-  mediaUrl: null,
-  mediaType: null, // 'video' | 'image' | null
+  masterMedia: { file: null, url: null, type: null },
+  platformMedia: {
+    youtube: { file: null, url: null, type: null, custom: false },
+    x: { file: null, url: null, type: null, custom: false },
+    linkedin: { file: null, url: null, type: null, custom: false },
+    instagram: { file: null, url: null, type: null, custom: false },
+    threads: { file: null, url: null, type: null, custom: false },
+    facebook: { file: null, url: null, type: null, custom: false }
+  },
   currentStep: 1,
+  activeStudioPlatform: 'youtube',
   currentPreviewTab: 'youtube'
+};
+
+const PLATFORMS_META = {
+  youtube: { name: 'YouTube', icon: '🔴', panelId: 'panel-youtube' },
+  x: { name: 'X (Twitter)', icon: '🐦', panelId: 'panel-x' },
+  linkedin: { name: 'LinkedIn', icon: '💼', panelId: 'panel-linkedin' },
+  instagram: { name: 'Instagram', icon: '📸', panelId: 'panel-instagram' },
+  threads: { name: 'Threads', icon: '🧵', panelId: 'panel-threads' },
+  facebook: { name: 'Facebook', icon: '📘', panelId: 'panel-facebook' }
 };
 
 // --- DOM ELEMENTS ---
@@ -22,10 +38,10 @@ const el = {
   // Step 1 Inputs
   masterText: document.getElementById('master_text'),
   masterHashtags: document.getElementById('master_hashtags'),
-  dropzone: document.getElementById('dropzone'),
-  fileInput: document.getElementById('media-file-input'),
-  previewContainer: document.getElementById('media-preview-container'),
-  btnRemoveMedia: document.getElementById('btn-remove-media'),
+  dropzoneMaster: document.getElementById('dropzone-master'),
+  fileInputMaster: document.getElementById('media-master-input'),
+  previewMaster: document.getElementById('media-preview-master'),
+  btnRemoveMasterMedia: document.getElementById('btn-remove-master-media'),
   platformCards: document.querySelectorAll('.platform-card'),
   timingRadios: document.querySelectorAll('input[name="timing"]'),
   scheduleInputs: document.getElementById('schedule-inputs'),
@@ -33,13 +49,15 @@ const el = {
   scheduleTime: document.getElementById('schedule_time'),
   btnGotoStep2: document.getElementById('btn-goto-step-2'),
 
-  // Step 2 Inputs
+  // Step 2 Studio Controls
+  studioNavBar: document.getElementById('studio-nav-bar'),
   ytTitle: document.getElementById('youtube_title'),
   ytPrivacy: document.getElementById('youtube_privacy'),
   xOverride: document.getElementById('x_override'),
   liOverride: document.getElementById('linkedin_override'),
   igOverride: document.getElementById('instagram_override'),
   threadsOverride: document.getElementById('threads_override'),
+  fbOverride: document.getElementById('facebook_override'),
   btnBacktoStep1: document.getElementById('btn-backto-step-1'),
   btnGotoStep3: document.getElementById('btn-goto-step-3'),
 
@@ -69,8 +87,11 @@ const el = {
   liPreviewMedia: document.getElementById('li-preview-media'),
   threadsPreviewText: document.getElementById('threads-preview-text'),
   threadsTopicPill: document.getElementById('threads-topic-pill'),
+  threadsPreviewMedia: document.getElementById('threads-preview-media'),
   igPreviewCaption: document.getElementById('ig-preview-caption'),
   igPreviewPlayer: document.getElementById('ig-preview-player'),
+  fbPreviewText: document.getElementById('fb-preview-text'),
+  fbPreviewMedia: document.getElementById('fb-preview-media'),
 
   // Queue Tab
   btnRefreshQueue: document.getElementById('btn-refresh-queue'),
@@ -84,7 +105,8 @@ const el = {
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
   setupNavigation();
-  setupMediaUpload();
+  setupMasterMediaUpload();
+  setupPlatformCustomMedia();
   setupLiveSync();
   setupWizardNavigation();
   fetchStatus();
@@ -104,27 +126,15 @@ function setupNavigation() {
       const targetId = tab.getAttribute('data-target');
       document.getElementById(targetId).style.display = 'block';
 
-      if (targetId === 'tab-queue') {
-        fetchQueue();
-      }
-      if (targetId === 'tab-settings') {
-        fetchStatus();
-      }
+      if (targetId === 'tab-queue') fetchQueue();
+      if (targetId === 'tab-settings') fetchStatus();
     });
   });
 
-  // Preview Tabs
+  // Preview Tabs click
   el.previewTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
-      el.previewTabs.forEach((t) => t.classList.remove('active'));
-      el.previewCards.forEach((c) => {
-        c.style.display = 'none';
-      });
-
-      tab.classList.add('active');
-      const p = tab.getAttribute('data-preview');
-      state.currentPreviewTab = p;
-      document.getElementById(`card-${p}`).style.display = 'block';
+      switchPreviewCard(tab.getAttribute('data-preview'));
     });
   });
 
@@ -143,15 +153,13 @@ function setupNavigation() {
     });
   });
 
-  // Platform Cards
+  // Step 1 Platform Checklist Cards
   el.platformCards.forEach((card) => {
     card.addEventListener('click', () => {
       const p = card.getAttribute('data-platform');
       card.classList.toggle('selected');
       if (card.classList.contains('selected')) {
-        if (!state.selectedPlatforms.includes(p)) {
-          state.selectedPlatforms.push(p);
-        }
+        if (!state.selectedPlatforms.includes(p)) state.selectedPlatforms.push(p);
       } else {
         state.selectedPlatforms = state.selectedPlatforms.filter((x) => x !== p);
       }
@@ -160,172 +168,85 @@ function setupNavigation() {
   });
 }
 
-// --- MEDIA DRAG & DROP ---
-function setupMediaUpload() {
-  el.dropzone.addEventListener('click', () => el.fileInput.click());
+function switchPreviewCard(platform) {
+  state.currentPreviewTab = platform;
+  el.previewTabs.forEach((t) => {
+    t.classList.toggle('active', t.getAttribute('data-preview') === platform);
+  });
+  el.previewCards.forEach((c) => {
+    c.style.display = 'none';
+  });
+  const targetCard = document.getElementById(`card-${platform}`);
+  if (targetCard) targetCard.style.display = 'block';
+  renderPreviewMedia(platform);
+}
+
+// --- MASTER MEDIA UPLOAD ---
+function setupMasterMediaUpload() {
+  el.dropzoneMaster.addEventListener('click', () => el.fileInputMaster.click());
 
   ['dragenter', 'dragover'].forEach((name) => {
-    el.dropzone.addEventListener(name, (e) => {
+    el.dropzoneMaster.addEventListener(name, (e) => {
       e.preventDefault();
-      el.dropzone.classList.add('dragover');
+      el.dropzoneMaster.classList.add('dragover');
     });
   });
 
   ['dragleave', 'drop'].forEach((name) => {
-    el.dropzone.addEventListener(name, (e) => {
+    el.dropzoneMaster.addEventListener(name, (e) => {
       e.preventDefault();
-      el.dropzone.classList.remove('dragover');
+      el.dropzoneMaster.classList.remove('dragover');
     });
   });
 
-  el.dropzone.addEventListener('drop', (e) => {
+  el.dropzoneMaster.addEventListener('drop', (e) => {
     const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFile(file);
-    }
+    if (file) handleMasterFile(file);
   });
 
-  el.fileInput.addEventListener('change', () => {
-    const file = el.fileInput.files[0];
-    if (file) {
-      handleFile(file);
-    }
+  el.fileInputMaster.addEventListener('change', () => {
+    const file = el.fileInputMaster.files[0];
+    if (file) handleMasterFile(file);
   });
 
-  el.btnRemoveMedia.addEventListener('click', (e) => {
+  el.btnRemoveMasterMedia.addEventListener('click', (e) => {
     e.stopPropagation();
-    state.mediaFile = null;
-    state.mediaUrl = null;
-    state.mediaType = null;
+    state.masterMedia = { file: null, url: null, type: null };
+    clearElement(el.previewMaster);
 
-    clearElement(el.previewContainer);
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-remove-media';
-    removeBtn.id = 'btn-remove-media';
     removeBtn.textContent = '✕ Remove';
-    removeBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      el.btnRemoveMedia.click();
-    });
-    el.previewContainer.appendChild(removeBtn);
-    el.previewContainer.style.display = 'none';
-    el.dropzone.style.display = 'block';
+    removeBtn.addEventListener('click', () => el.btnRemoveMasterMedia.click());
+    el.previewMaster.appendChild(removeBtn);
 
-    // Reset preview elements safely
-    clearElement(el.ytPreviewPlayer);
-    const ytSpan = document.createElement('span');
-    ytSpan.textContent = '▶ Video Preview';
-    el.ytPreviewPlayer.appendChild(ytSpan);
+    el.previewMaster.style.display = 'none';
+    el.dropzoneMaster.style.display = 'block';
 
-    el.xPreviewMedia.style.display = 'none';
-    clearElement(el.xPreviewMedia);
-
-    el.liPreviewMedia.style.display = 'none';
-    clearElement(el.liPreviewMedia);
-
-    clearElement(el.igPreviewPlayer);
-    const igSpan = document.createElement('span');
-    igSpan.textContent = 'Photo / Reel Preview';
-    el.igPreviewPlayer.appendChild(igSpan);
-
+    renderAllPreviewMedia();
     updateReviewSummary();
   });
 }
 
-function handleFile(file) {
-  state.mediaFile = file;
-  state.mediaType = file.type.startsWith('video') ? 'video' : 'image';
-  state.mediaUrl = URL.createObjectURL(file);
+function handleMasterFile(file) {
+  state.masterMedia.file = file;
+  state.masterMedia.type = file.type.startsWith('video') ? 'video' : 'image';
+  state.masterMedia.url = URL.createObjectURL(file);
 
-  el.dropzone.style.display = 'none';
-  el.previewContainer.style.display = 'flex';
+  el.dropzoneMaster.style.display = 'none';
+  el.previewMaster.style.display = 'flex';
+  clearElement(el.previewMaster);
 
-  clearElement(el.previewContainer);
-  clearElement(el.ytPreviewPlayer);
-  clearElement(el.xPreviewMedia);
-  clearElement(el.liPreviewMedia);
-  clearElement(el.igPreviewPlayer);
-
-  if (state.mediaType === 'video') {
-    const mainVid = document.createElement('video');
-    mainVid.src = state.mediaUrl;
-    mainVid.controls = true;
-    el.previewContainer.appendChild(mainVid);
-
-    const ytVid = document.createElement('video');
-    ytVid.src = state.mediaUrl;
-    ytVid.controls = true;
-    ytVid.style.width = '100%';
-    ytVid.style.height = '100%';
-    ytVid.style.objectFit = 'cover';
-    el.ytPreviewPlayer.appendChild(ytVid);
-
-    el.xPreviewMedia.style.display = 'block';
-    const xVid = document.createElement('video');
-    xVid.src = state.mediaUrl;
-    xVid.controls = true;
-    xVid.style.width = '100%';
-    xVid.style.height = 'auto';
-    xVid.style.maxHeight = '250px';
-    el.xPreviewMedia.appendChild(xVid);
-
-    el.liPreviewMedia.style.display = 'block';
-    const liVid = document.createElement('video');
-    liVid.src = state.mediaUrl;
-    liVid.controls = true;
-    liVid.style.width = '100%';
-    liVid.style.height = 'auto';
-    liVid.style.maxHeight = '250px';
-    el.liPreviewMedia.appendChild(liVid);
-
-    const igVid = document.createElement('video');
-    igVid.src = state.mediaUrl;
-    igVid.controls = true;
-    igVid.style.width = '100%';
-    igVid.style.height = '100%';
-    igVid.style.objectFit = 'cover';
-    el.igPreviewPlayer.appendChild(igVid);
+  if (state.masterMedia.type === 'video') {
+    const vid = document.createElement('video');
+    vid.src = state.masterMedia.url;
+    vid.controls = true;
+    el.previewMaster.appendChild(vid);
   } else {
-    const mainImg = document.createElement('img');
-    mainImg.src = state.mediaUrl;
-    mainImg.alt = 'Upload preview';
-    el.previewContainer.appendChild(mainImg);
-
-    const ytImg = document.createElement('img');
-    ytImg.src = state.mediaUrl;
-    ytImg.alt = 'YouTube thumbnail';
-    ytImg.style.width = '100%';
-    ytImg.style.height = '100%';
-    ytImg.style.objectFit = 'cover';
-    el.ytPreviewPlayer.appendChild(ytImg);
-
-    el.xPreviewMedia.style.display = 'block';
-    const xImg = document.createElement('img');
-    xImg.src = state.mediaUrl;
-    xImg.alt = 'X preview';
-    xImg.style.width = '100%';
-    xImg.style.height = 'auto';
-    xImg.style.maxHeight = '250px';
-    xImg.style.objectFit = 'cover';
-    el.xPreviewMedia.appendChild(xImg);
-
-    el.liPreviewMedia.style.display = 'block';
-    const liImg = document.createElement('img');
-    liImg.src = state.mediaUrl;
-    liImg.alt = 'LinkedIn preview';
-    liImg.style.width = '100%';
-    liImg.style.height = 'auto';
-    liImg.style.maxHeight = '250px';
-    liImg.style.objectFit = 'cover';
-    el.liPreviewMedia.appendChild(liImg);
-
-    const igImg = document.createElement('img');
-    igImg.src = state.mediaUrl;
-    igImg.alt = 'Instagram preview';
-    igImg.style.width = '100%';
-    igImg.style.height = '100%';
-    igImg.style.objectFit = 'cover';
-    el.igPreviewPlayer.appendChild(igImg);
+    const img = document.createElement('img');
+    img.src = state.masterMedia.url;
+    img.alt = 'Master media preview';
+    el.previewMaster.appendChild(img);
   }
 
   const removeBtn = document.createElement('button');
@@ -333,22 +254,281 @@ function handleFile(file) {
   removeBtn.textContent = '✕ Remove';
   removeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    el.btnRemoveMedia.click();
+    el.btnRemoveMasterMedia.click();
   });
-  el.previewContainer.appendChild(removeBtn);
+  el.previewMaster.appendChild(removeBtn);
 
+  renderAllPreviewMedia();
   updateReviewSummary();
+}
+
+// --- PLATFORM CUSTOM MEDIA HANDLERS ---
+function setupPlatformCustomMedia() {
+  const platforms = ['youtube', 'x', 'linkedin', 'instagram', 'threads', 'facebook'];
+
+  platforms.forEach((p) => {
+    // Radio toggle
+    const radios = document.querySelectorAll(`input[name="media_source_${p}"]`);
+    const customBox = document.getElementById(`custom-media-box-${p}`);
+    const dropzone = document.getElementById(`dropzone-${p}`);
+    const fileInput = document.getElementById(`media-${p}-input`);
+    const previewContainer = document.getElementById(`media-preview-${p}`);
+    const removeBtn = document.getElementById(`btn-remove-${p}-media`);
+
+    if (!radios.length) return;
+
+    radios.forEach((r) => {
+      r.addEventListener('change', () => {
+        if (r.value === 'custom') {
+          customBox.style.display = 'block';
+          state.platformMedia[p].custom = true;
+        } else {
+          customBox.style.display = 'none';
+          state.platformMedia[p].custom = false;
+        }
+        renderPreviewMedia(p);
+      });
+    });
+
+    if (dropzone && fileInput) {
+      dropzone.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (file) {
+          state.platformMedia[p].file = file;
+          state.platformMedia[p].type = file.type.startsWith('video') ? 'video' : 'image';
+          state.platformMedia[p].url = URL.createObjectURL(file);
+
+          dropzone.style.display = 'none';
+          previewContainer.style.display = 'flex';
+          clearElement(previewContainer);
+
+          if (state.platformMedia[p].type === 'video') {
+            const v = document.createElement('video');
+            v.src = state.platformMedia[p].url;
+            v.controls = true;
+            previewContainer.appendChild(v);
+          } else {
+            const im = document.createElement('img');
+            im.src = state.platformMedia[p].url;
+            im.alt = `${p} custom media`;
+            previewContainer.appendChild(im);
+          }
+
+          const rem = document.createElement('button');
+          rem.className = 'btn-remove-media';
+          rem.textContent = '✕ Remove';
+          rem.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            removeBtn.click();
+          });
+          previewContainer.appendChild(rem);
+
+          renderPreviewMedia(p);
+          updateReviewSummary();
+        }
+      });
+    }
+
+    if (removeBtn) {
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.platformMedia[p].file = null;
+        state.platformMedia[p].url = null;
+        state.platformMedia[p].type = null;
+
+        clearElement(previewContainer);
+        const rem = document.createElement('button');
+        rem.className = 'btn-remove-media';
+        rem.textContent = '✕ Remove';
+        rem.addEventListener('click', () => removeBtn.click());
+        previewContainer.appendChild(rem);
+
+        previewContainer.style.display = 'none';
+        dropzone.style.display = 'block';
+        renderPreviewMedia(p);
+        updateReviewSummary();
+      });
+    }
+  });
+}
+
+// Get the active media object for a platform (Custom overrides Master)
+function getEffectiveMedia(platform) {
+  const custom = state.platformMedia[platform];
+  if (custom && custom.custom && custom.url) {
+    return custom;
+  }
+  return state.masterMedia;
+}
+
+// Render media inside social cards
+function renderPreviewMedia(platform) {
+  const media = getEffectiveMedia(platform);
+
+  if (platform === 'youtube') {
+    clearElement(el.ytPreviewPlayer);
+    if (media.url && media.type === 'video') {
+      const v = document.createElement('video');
+      v.src = media.url;
+      v.controls = true;
+      v.style.width = '100%';
+      v.style.height = '100%';
+      v.style.objectFit = 'cover';
+      el.ytPreviewPlayer.appendChild(v);
+    } else if (media.url) {
+      const img = document.createElement('img');
+      img.src = media.url;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      el.ytPreviewPlayer.appendChild(img);
+    } else {
+      const s = document.createElement('span');
+      s.textContent = '▶ Video Preview';
+      el.ytPreviewPlayer.appendChild(s);
+    }
+  } else if (platform === 'x') {
+    clearElement(el.xPreviewMedia);
+    if (media.url) {
+      el.xPreviewMedia.style.display = 'block';
+      const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
+      elMedia.src = media.url;
+      if (media.type === 'video') elMedia.controls = true;
+      elMedia.style.width = '100%';
+      elMedia.style.maxHeight = '250px';
+      elMedia.style.objectFit = 'cover';
+      el.xPreviewMedia.appendChild(elMedia);
+    } else {
+      el.xPreviewMedia.style.display = 'none';
+    }
+  } else if (platform === 'linkedin') {
+    clearElement(el.liPreviewMedia);
+    if (media.url) {
+      el.liPreviewMedia.style.display = 'block';
+      const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
+      elMedia.src = media.url;
+      if (media.type === 'video') elMedia.controls = true;
+      elMedia.style.width = '100%';
+      elMedia.style.maxHeight = '250px';
+      elMedia.style.objectFit = 'cover';
+      el.liPreviewMedia.appendChild(elMedia);
+    } else {
+      el.liPreviewMedia.style.display = 'none';
+    }
+  } else if (platform === 'instagram') {
+    clearElement(el.igPreviewPlayer);
+    if (media.url) {
+      const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
+      elMedia.src = media.url;
+      if (media.type === 'video') elMedia.controls = true;
+      elMedia.style.width = '100%';
+      elMedia.style.height = '100%';
+      elMedia.style.objectFit = 'cover';
+      el.igPreviewPlayer.appendChild(elMedia);
+    } else {
+      const s = document.createElement('span');
+      s.textContent = 'Photo / Reel Preview';
+      el.igPreviewPlayer.appendChild(s);
+    }
+  } else if (platform === 'threads') {
+    clearElement(el.threadsPreviewMedia);
+    if (media.url) {
+      el.threadsPreviewMedia.style.display = 'block';
+      const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
+      elMedia.src = media.url;
+      if (media.type === 'video') elMedia.controls = true;
+      elMedia.style.width = '100%';
+      elMedia.style.maxHeight = '220px';
+      elMedia.style.objectFit = 'cover';
+      el.threadsPreviewMedia.appendChild(elMedia);
+    } else {
+      el.threadsPreviewMedia.style.display = 'none';
+    }
+  } else if (platform === 'facebook') {
+    clearElement(el.fbPreviewMedia);
+    if (media.url) {
+      el.fbPreviewMedia.style.display = 'block';
+      const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
+      elMedia.src = media.url;
+      if (media.type === 'video') elMedia.controls = true;
+      elMedia.style.width = '100%';
+      elMedia.style.maxHeight = '220px';
+      elMedia.style.objectFit = 'cover';
+      el.fbPreviewMedia.appendChild(elMedia);
+    } else {
+      el.fbPreviewMedia.style.display = 'none';
+    }
+  }
+}
+
+function renderAllPreviewMedia() {
+  ['youtube', 'x', 'linkedin', 'instagram', 'threads', 'facebook'].forEach(renderPreviewMedia);
+}
+
+// --- DYNAMIC STEP 2 STUDIO TABS ---
+function buildStudioNavBar() {
+  clearElement(el.studioNavBar);
+
+  const activePlatforms = state.selectedPlatforms.filter((p) => PLATFORMS_META[p]);
+  if (!activePlatforms.length) {
+    const notice = document.createElement('div');
+    notice.style.padding = '8px 12px';
+    notice.style.color = 'var(--warning)';
+    notice.textContent = 'No channels selected. Please select at least one channel in Step 1.';
+    el.studioNavBar.appendChild(notice);
+    return;
+  }
+
+  // Ensure activeStudioPlatform is among selected
+  if (!activePlatforms.includes(state.activeStudioPlatform)) {
+    state.activeStudioPlatform = activePlatforms[0];
+  }
+
+  activePlatforms.forEach((p) => {
+    const meta = PLATFORMS_META[p];
+    const btn = document.createElement('button');
+    btn.className = `studio-tab-btn ${state.activeStudioPlatform === p ? 'active' : ''}`;
+    btn.textContent = `${meta.icon} ${meta.name} Studio`;
+
+    btn.addEventListener('click', () => {
+      switchStudioPlatform(p);
+    });
+
+    el.studioNavBar.appendChild(btn);
+  });
+
+  switchStudioPlatform(state.activeStudioPlatform);
+}
+
+function switchStudioPlatform(platform) {
+  state.activeStudioPlatform = platform;
+
+  // Highlight studio button
+  document.querySelectorAll('.studio-tab-btn').forEach((b) => {
+    b.classList.toggle('active', b.textContent.includes(PLATFORMS_META[platform].name));
+  });
+
+  // Show only this platform's panel
+  document.querySelectorAll('.platform-panel').forEach((p) => {
+    p.style.display = 'none';
+  });
+  const targetPanel = document.getElementById(PLATFORMS_META[platform].panelId);
+  if (targetPanel) targetPanel.style.display = 'block';
+
+  // AUTO-SYNC RIGHT PANE PREVIEW CARD!
+  switchPreviewCard(platform);
 }
 
 // --- LIVE TEXT SYNC & PREVIEWS ---
 function setupLiveSync() {
   const inputs = [
     el.masterText, el.masterHashtags, el.ytTitle,
-    el.xOverride, el.liOverride, el.igOverride, el.threadsOverride
+    el.xOverride, el.liOverride, el.igOverride, el.threadsOverride, el.fbOverride
   ];
 
   inputs.forEach((input) => {
-    input.addEventListener('input', updateLivePreviews);
+    if (input) input.addEventListener('input', updateLivePreviews);
   });
 }
 
@@ -356,7 +536,6 @@ function updateLivePreviews() {
   const master = el.masterText.value.trim();
   const rawTags = el.masterHashtags.value.trim();
 
-  // Char count for master
   el.masterCharCount.textContent = `${master.length} characters`;
 
   // 1. YouTube Preview
@@ -381,17 +560,21 @@ function updateLivePreviews() {
   el.liPreviewText.textContent = liText;
   el.liCharCount.textContent = `${liText.length}/3000`;
 
-  // 4. Threads Preview
+  // 4. Instagram Preview
+  const igOverride = el.igOverride.value.trim();
+  const igCaption = igOverride || (master ? `${master}\n\n${rawTags}` : 'Instagram caption...');
+  el.igPreviewCaption.textContent = igCaption;
+
+  // 5. Threads Preview
   const threadsOverride = el.threadsOverride.value.trim();
   const threadsText = threadsOverride || master || 'Threads update preview...';
   el.threadsPreviewText.textContent = threadsText;
   const topicTag = rawTags.split(/[\s,]+/).find(Boolean) || '';
-  el.threadsTopicPill.textContent = topicTag ? `#${topicTag.replace(/^#/, '')}` : '#topic';
+  el.threadsTopicPill.textContent = topicTag ? `#${topicTag.replace(/^[#.&]+/, '')}` : '#topic';
 
-  // 5. Instagram Preview
-  const igOverride = el.igOverride.value.trim();
-  const igCaption = igOverride || (master ? `${master}\n\n${rawTags}` : 'Instagram caption...');
-  el.igPreviewCaption.textContent = igCaption;
+  // 6. Facebook Preview
+  const fbOverride = el.fbOverride ? el.fbOverride.value.trim() : '';
+  el.fbPreviewText.textContent = fbOverride || master || 'Facebook post copy...';
 }
 
 // --- WIZARD NAVIGATION ---
@@ -402,9 +585,16 @@ function setupWizardNavigation() {
       el.masterText.focus();
       return;
     }
+    if (!state.selectedPlatforms.length) {
+      alert('Please select at least one channel to publish to.');
+      return;
+    }
+
     el.step1.style.display = 'none';
     el.step2.style.display = 'block';
     state.currentStep = 2;
+
+    buildStudioNavBar();
   });
 
   el.btnBacktoStep1.addEventListener('click', () => {
@@ -436,13 +626,8 @@ function setupWizardNavigation() {
 
 function updateReviewSummary() {
   const names = state.selectedPlatforms.map((p) => {
-    if (p === 'youtube') return 'YouTube 🔴';
-    if (p === 'x') return 'X 🐦';
-    if (p === 'linkedin') return 'LinkedIn 💼';
-    if (p === 'instagram') return 'Instagram 📸';
-    if (p === 'threads') return 'Threads 🧵';
-    if (p === 'facebook') return 'Facebook 📘';
-    return p;
+    const meta = PLATFORMS_META[p];
+    return meta ? `${meta.icon} ${meta.name}` : p;
   });
 
   clearElement(el.sumChannels);
@@ -457,8 +642,19 @@ function updateReviewSummary() {
   }
 
   clearElement(el.sumMedia);
-  if (state.mediaFile) {
-    appendBoldLabel(el.sumMedia, '📁 Media: ', `${state.mediaFile.name} (${(state.mediaFile.size / (1024 * 1024)).toFixed(2)} MB)`);
+  const mediaDetails = [];
+  if (state.masterMedia.file) {
+    mediaDetails.push(`Master: ${state.masterMedia.file.name}`);
+  }
+  Object.keys(state.platformMedia).forEach((p) => {
+    const pm = state.platformMedia[p];
+    if (pm.custom && pm.file) {
+      mediaDetails.push(`${PLATFORMS_META[p].name} Custom: ${pm.file.name}`);
+    }
+  });
+
+  if (mediaDetails.length) {
+    appendBoldLabel(el.sumMedia, '📁 Media: ', mediaDetails.join(' | '));
   } else {
     appendBoldLabel(el.sumMedia, '📁 Media: ', 'Text only (No media)');
   }
@@ -480,15 +676,41 @@ async function submitPost() {
     formData.append('schedule_time', el.scheduleTime.value);
   }
 
+  // Master media
+  if (state.masterMedia.file) {
+    formData.append('media', state.masterMedia.file);
+  }
+
+  // Overrides & Custom per-platform media
   if (el.ytTitle.value.trim()) formData.append('youtube_title', el.ytTitle.value.trim());
   formData.append('youtube_privacy', el.ytPrivacy.value);
-  if (el.xOverride.value.trim()) formData.append('x_override', el.xOverride.value.trim());
-  if (el.liOverride.value.trim()) formData.append('linkedin_override', el.liOverride.value.trim());
-  if (el.igOverride.value.trim()) formData.append('instagram_override', el.igOverride.value.trim());
-  if (el.threadsOverride.value.trim()) formData.append('threads_override', el.threadsOverride.value.trim());
+  if (state.platformMedia.youtube.custom && state.platformMedia.youtube.file) {
+    formData.append('media_youtube', state.platformMedia.youtube.file);
+  }
 
-  if (state.mediaFile) {
-    formData.append('media', state.mediaFile);
+  if (el.xOverride.value.trim()) formData.append('x_override', el.xOverride.value.trim());
+  if (state.platformMedia.x.custom && state.platformMedia.x.file) {
+    formData.append('media_x', state.platformMedia.x.file);
+  }
+
+  if (el.liOverride.value.trim()) formData.append('linkedin_override', el.liOverride.value.trim());
+  if (state.platformMedia.linkedin.custom && state.platformMedia.linkedin.file) {
+    formData.append('media_linkedin', state.platformMedia.linkedin.file);
+  }
+
+  if (el.igOverride.value.trim()) formData.append('instagram_override', el.igOverride.value.trim());
+  if (state.platformMedia.instagram.custom && state.platformMedia.instagram.file) {
+    formData.append('media_instagram', state.platformMedia.instagram.file);
+  }
+
+  if (el.threadsOverride.value.trim()) formData.append('threads_override', el.threadsOverride.value.trim());
+  if (state.platformMedia.threads.custom && state.platformMedia.threads.file) {
+    formData.append('media_threads', state.platformMedia.threads.file);
+  }
+
+  if (el.fbOverride && el.fbOverride.value.trim()) formData.append('facebook_override', el.fbOverride.value.trim());
+  if (state.platformMedia.facebook.custom && state.platformMedia.facebook.file) {
+    formData.append('media_facebook', state.platformMedia.facebook.file);
   }
 
   try {
@@ -501,14 +723,20 @@ async function submitPost() {
     if (data.success) {
       alert(`🎉 Post #${data.postId} ${data.post.status === 'scheduled' ? 'Scheduled Successfully!' : 'Published Successfully!'}`);
 
+      // Reset Form
       el.masterText.value = '';
       el.masterHashtags.value = '';
       el.ytTitle.value = '';
       el.xOverride.value = '';
       el.liOverride.value = '';
-      el.btnRemoveMedia.click();
+      el.igOverride.value = '';
+      el.threadsOverride.value = '';
+      if (el.fbOverride) el.fbOverride.value = '';
+
+      el.btnRemoveMasterMedia.click();
       el.approvalCheckbox.checked = false;
 
+      // Return to Step 1 & open queue
       el.step3.style.display = 'none';
       el.step1.style.display = 'block';
       state.currentStep = 1;
