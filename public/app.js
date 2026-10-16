@@ -85,6 +85,7 @@ const el = {
   xPreviewMedia: document.getElementById('x-preview-media'),
   liPreviewText: document.getElementById('li-preview-text'),
   liPreviewMedia: document.getElementById('li-preview-media'),
+  liPreviewMediaCard: document.getElementById('li-preview-media-card'),
   threadsPreviewText: document.getElementById('threads-preview-text'),
   threadsTopicPill: document.getElementById('threads-topic-pill'),
   threadsPreviewMedia: document.getElementById('threads-preview-media'),
@@ -405,7 +406,7 @@ function renderPreviewMedia(platform) {
   } else if (platform === 'linkedin') {
     clearElement(el.liPreviewMedia);
     if (media.url) {
-      el.liPreviewMedia.style.display = 'block';
+      if (el.liPreviewMediaCard) el.liPreviewMediaCard.style.display = 'block';
       const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
       elMedia.src = media.url;
       if (media.type === 'video') elMedia.controls = true;
@@ -414,7 +415,7 @@ function renderPreviewMedia(platform) {
       elMedia.style.objectFit = 'cover';
       el.liPreviewMedia.appendChild(elMedia);
     } else {
-      el.liPreviewMedia.style.display = 'none';
+      if (el.liPreviewMediaCard) el.liPreviewMediaCard.style.display = 'none';
     }
   } else if (platform === 'instagram') {
     clearElement(el.igPreviewPlayer);
