@@ -1,29 +1,41 @@
 /**
  * Platform Adapters Registry
  * Each adapter implements publish(post): Promise<{ platform, success, url, error }>
- * When credentials are missing, it returns a clean error explaining how to enable the platform.
+ * Looks up client-specific encrypted credentials in SQLite first!
  */
 
+const db = require('../db');
 const { publishYouTube } = require('./youtube');
 
+function getClientPlatformTokens(clientId, platform) {
+  if (!clientId) return null;
+  try {
+    const accounts = db.getAccountsByClient(clientId);
+    const acc = accounts.find((a) => a.platform.toLowerCase() === platform.toLowerCase());
+    return acc ? acc.tokens : null;
+  } catch {
+    return null;
+  }
+}
+
 async function publishX(post) {
-  const apiKey = process.env.X_API_KEY;
+  const clientTokens = getClientPlatformTokens(post.client_id, 'x');
+  const apiKey = clientTokens?.apiKey || process.env.X_API_KEY;
+
   if (!apiKey) {
     return {
       platform: 'x',
       success: false,
-      error: 'X (Twitter) API credentials are not configured in .env (X_API_KEY).'
+      error: 'X (Twitter) is not connected for this client. Please add API keys under Clients & Brands.'
     };
   }
 
-  // Implementation for X API v2 tweet endpoint
   try {
-    // Basic placeholder for X API v2 call
     return {
       platform: 'x',
       success: true,
       text: post.x_post,
-      note: 'Simulated dispatch. Connect X credentials to go live.'
+      note: 'Simulated dispatch with client credentials.'
     };
   } catch (err) {
     return {
@@ -35,12 +47,14 @@ async function publishX(post) {
 }
 
 async function publishLinkedIn(post) {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
+  const clientTokens = getClientPlatformTokens(post.client_id, 'linkedin');
+  const token = clientTokens?.accessToken || process.env.LINKEDIN_ACCESS_TOKEN;
+
   if (!token) {
     return {
       platform: 'linkedin',
       success: false,
-      error: 'LinkedIn OAuth access token is not configured in .env (LINKEDIN_ACCESS_TOKEN).'
+      error: 'LinkedIn is not connected for this client. Please add access token under Clients & Brands.'
     };
   }
 
@@ -49,7 +63,7 @@ async function publishLinkedIn(post) {
       platform: 'linkedin',
       success: true,
       text: post.linkedin_post,
-      note: 'Simulated dispatch. Connect LinkedIn token to go live.'
+      note: 'Simulated dispatch with client credentials.'
     };
   } catch (err) {
     return {
@@ -61,13 +75,15 @@ async function publishLinkedIn(post) {
 }
 
 async function publishInstagram(post) {
-  const token = process.env.META_ACCESS_TOKEN;
-  const igAccountId = process.env.INSTAGRAM_ACCOUNT_ID;
+  const clientTokens = getClientPlatformTokens(post.client_id, 'instagram');
+  const token = clientTokens?.accessToken || process.env.META_ACCESS_TOKEN;
+  const igAccountId = clientTokens?.accountId || process.env.INSTAGRAM_ACCOUNT_ID;
+
   if (!token || !igAccountId) {
     return {
       platform: 'instagram',
       success: false,
-      error: 'Instagram Graph API requires META_ACCESS_TOKEN and INSTAGRAM_ACCOUNT_ID in .env.'
+      error: 'Instagram is not connected for this client. Please add Meta Token & Account ID under Clients & Brands.'
     };
   }
 
@@ -76,7 +92,7 @@ async function publishInstagram(post) {
       platform: 'instagram',
       success: true,
       caption: post.instagram_caption,
-      note: 'Simulated dispatch. Staging on public URL required for live Meta ingestion.'
+      note: 'Simulated dispatch with client credentials. Staging on public URL required for live Meta ingestion.'
     };
   } catch (err) {
     return {
@@ -88,12 +104,14 @@ async function publishInstagram(post) {
 }
 
 async function publishThreads(post) {
-  const token = process.env.THREADS_ACCESS_TOKEN;
+  const clientTokens = getClientPlatformTokens(post.client_id, 'threads');
+  const token = clientTokens?.accessToken || process.env.THREADS_ACCESS_TOKEN;
+
   if (!token) {
     return {
       platform: 'threads',
       success: false,
-      error: 'Threads API requires THREADS_ACCESS_TOKEN in .env.'
+      error: 'Threads is not connected for this client. Please add Threads Token under Clients & Brands.'
     };
   }
 
@@ -102,7 +120,7 @@ async function publishThreads(post) {
       platform: 'threads',
       success: true,
       text: post.threads_post,
-      note: 'Simulated dispatch.'
+      note: 'Simulated dispatch with client credentials.'
     };
   } catch (err) {
     return {
@@ -114,13 +132,15 @@ async function publishThreads(post) {
 }
 
 async function publishFacebook(post) {
-  const token = process.env.META_ACCESS_TOKEN;
-  const pageId = process.env.META_PAGE_ID;
+  const clientTokens = getClientPlatformTokens(post.client_id, 'facebook');
+  const token = clientTokens?.accessToken || process.env.META_ACCESS_TOKEN;
+  const pageId = clientTokens?.pageId || process.env.META_PAGE_ID;
+
   if (!token || !pageId) {
     return {
       platform: 'facebook',
       success: false,
-      error: 'Facebook Pages API requires META_ACCESS_TOKEN and META_PAGE_ID in .env.'
+      error: 'Facebook is not connected for this client. Please add Page Access Token under Clients & Brands.'
     };
   }
 
@@ -129,7 +149,7 @@ async function publishFacebook(post) {
       platform: 'facebook',
       success: true,
       post: post.facebook_post,
-      note: 'Simulated dispatch.'
+      note: 'Simulated dispatch with client credentials.'
     };
   } catch (err) {
     return {
@@ -146,7 +166,6 @@ async function dispatchPost(post) {
   const errors = [];
   const successes = [];
 
-  // Concurrent multi-channel dispatching via Promise.allSettled
   const dispatchPromises = platforms.map(async (p) => {
     const key = p.toLowerCase();
     try {
@@ -188,7 +207,6 @@ async function dispatchPost(post) {
     }
   }
 
-  // Determine DAG State Machine outcome
   let finalStatus = 'completed';
   if (successes.length === 0 && errors.length > 0) {
     finalStatus = 'failed';
@@ -211,5 +229,6 @@ module.exports = {
   publishLinkedIn,
   publishInstagram,
   publishThreads,
-  publishFacebook
+  publishFacebook,
+  getClientPlatformTokens
 };

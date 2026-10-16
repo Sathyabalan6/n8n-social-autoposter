@@ -135,6 +135,20 @@ app.get('/api/accounts', (_req, res) => {
   }
 });
 
+app.post('/api/clients/:id/accounts', (req, res) => {
+  try {
+    const clientId = parseInt(req.params.id, 10);
+    const { platform, account_name, account_handle, tokens } = req.body;
+    if (!platform || !account_name) {
+      return res.status(400).json({ success: false, error: 'Platform and Account Name are required' });
+    }
+    const id = db.saveAccountTokens(clientId, platform.toLowerCase(), account_name.trim(), account_handle || '', '', tokens || {});
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.delete('/api/accounts/:id', (req, res) => {
   try {
     db.deleteAccount(req.params.id);

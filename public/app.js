@@ -940,11 +940,18 @@ function setupClientsManager() {
   const newClientName = document.getElementById('new-client-name');
   const newClientColor = document.getElementById('new-client-color');
 
+  // Channel Connection Modal Elements
+  const channelModal = document.getElementById('add-channel-modal');
+  const modalPlatformSelect = document.getElementById('modal-platform-select');
+  const btnCloseModal = document.getElementById('btn-close-channel-modal');
+  const btnCancelModal = document.getElementById('btn-cancel-modal');
+  const btnSaveCreds = document.getElementById('btn-save-channel-creds');
+
   if (headerSelect) {
     headerSelect.addEventListener('change', () => {
       state.activeClientId = parseInt(headerSelect.value, 10);
       if (wizardSelect) wizardSelect.value = state.activeClientId;
-      showToast(`Switched active client workspace.`, 'info');
+      showToast('Switched active client workspace.', 'info');
       fetchStatus();
       fetchQueue();
     });
@@ -1001,6 +1008,84 @@ function setupClientsManager() {
       }
     });
   }
+
+  // Modal Platform Switcher
+  if (modalPlatformSelect) {
+    modalPlatformSelect.addEventListener('change', () => {
+      const p = modalPlatformSelect.value;
+      document.querySelectorAll('.cred-fields-block').forEach((b) => {
+        b.style.display = 'none';
+      });
+      const activeBlock = document.getElementById(`cred-fields-${p}`);
+      if (activeBlock) activeBlock.style.display = 'block';
+    });
+  }
+
+  const hideChannelModal = () => {
+    if (channelModal) channelModal.style.display = 'none';
+  };
+
+  if (btnCloseModal) btnCloseModal.addEventListener('click', hideChannelModal);
+  if (btnCancelModal) btnCancelModal.addEventListener('click', hideChannelModal);
+
+  if (btnSaveCreds) {
+    btnSaveCreds.addEventListener('click', async () => {
+      const clientId = document.getElementById('modal-client-id').value;
+      const platform = modalPlatformSelect.value;
+      const accountName = document.getElementById('modal-account-name').value.trim() || `${platform} Account`;
+
+      let tokens = {};
+      if (platform === 'x') {
+        tokens = {
+          apiKey: document.getElementById('cred-x-apikey').value.trim(),
+          accessToken: document.getElementById('cred-x-token').value.trim()
+        };
+      } else if (platform === 'linkedin') {
+        tokens = {
+          accessToken: document.getElementById('cred-li-token').value.trim(),
+          urn: document.getElementById('cred-li-urn').value.trim()
+        };
+      } else if (platform === 'instagram') {
+        tokens = {
+          accessToken: document.getElementById('cred-ig-token').value.trim(),
+          accountId: document.getElementById('cred-ig-id').value.trim()
+        };
+      } else if (platform === 'threads') {
+        tokens = {
+          accessToken: document.getElementById('cred-threads-token').value.trim()
+        };
+      } else if (platform === 'facebook') {
+        tokens = {
+          accessToken: document.getElementById('cred-fb-token').value.trim(),
+          pageId: document.getElementById('cred-fb-pageid').value.trim()
+        };
+      }
+
+      try {
+        const res = await fetch(`/api/clients/${clientId}/accounts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            platform,
+            account_name: accountName,
+            account_handle: accountName,
+            tokens
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Connected ${platform} API credentials for this client! (AES-256 Encrypted)`, 'success');
+          hideChannelModal();
+          await fetchClients();
+          fetchStatus();
+        } else {
+          showToast(`Error saving credentials: ${data.error}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Network error: ${err.message}`, 'error');
+      }
+    });
+  }
 }
 
 async function fetchClients() {
@@ -1037,15 +1122,26 @@ async function fetchClients() {
     if (container) {
       clearElement(container);
       for (const client of state.clients) {
+        // Fetch accounts for this specific client
+        const accRes = await fetch(`/api/clients/${client.id}/accounts`);
+        const accData = await accRes.json();
+        const accounts = accData.accounts || [];
+
         const card = document.createElement('div');
         card.style.background = 'var(--bg-primary)';
         card.style.border = `1px solid var(--border)`;
         card.style.borderLeft = `6px solid ${client.color_code || '#3B82F6'}`;
         card.style.borderRadius = '8px';
-        card.style.padding = '16px 20px';
+        card.style.padding = '18px 20px';
         card.style.display = 'flex';
-        card.style.justifyContent = 'space-between';
-        card.style.alignItems = 'center';
+        card.style.flexDirection = 'column';
+        card.style.gap = '14px';
+
+        // Header Row
+        const headerRow = document.createElement('div');
+        headerRow.style.display = 'flex';
+        headerRow.style.justifyContent = 'space-between';
+        headerRow.style.alignItems = 'center';
 
         const infoDiv = document.createElement('div');
         const h3 = document.createElement('h3');
@@ -1055,9 +1151,9 @@ async function fetchClients() {
         h3.textContent = client.name;
 
         const sub = document.createElement('p');
-        sub.style.fontSize = '0.85rem';
+        sub.style.fontSize = '0.8rem';
         sub.style.color = 'var(--text-secondary)';
-        sub.style.marginTop = '4px';
+        sub.style.marginTop = '2px';
         sub.textContent = `Client ID #${client.id} • Registered ${new Date(client.created_at).toLocaleDateString()}`;
 
         infoDiv.appendChild(h3);
@@ -1067,14 +1163,15 @@ async function fetchClients() {
         actionsDiv.style.display = 'flex';
         actionsDiv.style.gap = '8px';
 
-        const btnConnect = document.createElement('a');
-        btnConnect.href = `/auth/youtube?clientId=${client.id}`;
-        btnConnect.className = 'btn btn-primary';
-        btnConnect.style.padding = '6px 14px';
-        btnConnect.style.fontSize = '0.8rem';
-        btnConnect.textContent = '🔗 Connect YouTube for this Client';
-
-        actionsDiv.appendChild(btnConnect);
+        const btnAddChan = document.createElement('button');
+        btnAddChan.className = 'btn btn-primary';
+        btnAddChan.style.padding = '6px 14px';
+        btnAddChan.style.fontSize = '0.8rem';
+        btnAddChan.textContent = '+ Connect Channel / API';
+        btnAddChan.addEventListener('click', () => {
+          openChannelModal(client.id, client.name);
+        });
+        actionsDiv.appendChild(btnAddChan);
 
         if (client.id !== 1) {
           const btnDel = document.createElement('button');
@@ -1085,21 +1182,114 @@ async function fetchClients() {
           btnDel.addEventListener('click', async () => {
             if (!confirm(`Delete client "${client.name}" and all associated posts?`)) return;
             await fetch(`/api/clients/${client.id}`, { method: 'DELETE' });
-            showToast(`Client deleted.`, 'info');
+            showToast('Client deleted.', 'info');
             await fetchClients();
             fetchQueue();
           });
           actionsDiv.appendChild(btnDel);
         }
 
-        card.appendChild(infoDiv);
-        card.appendChild(actionsDiv);
+        headerRow.appendChild(infoDiv);
+        headerRow.appendChild(actionsDiv);
+        card.appendChild(headerRow);
+
+        // Connected Accounts Badges Row
+        const accountsRow = document.createElement('div');
+        accountsRow.style.display = 'flex';
+        accountsRow.style.flexWrap = 'wrap';
+        accountsRow.style.gap = '8px';
+        accountsRow.style.alignItems = 'center';
+        accountsRow.style.paddingTop = '10px';
+        accountsRow.style.borderTop = '1px solid var(--border)';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.style.fontSize = '0.75rem';
+        labelSpan.style.color = 'var(--text-muted)';
+        labelSpan.style.fontWeight = '600';
+        labelSpan.textContent = 'CONNECTED APIS:';
+        accountsRow.appendChild(labelSpan);
+
+        if (accounts.length === 0) {
+          const noAcc = document.createElement('span');
+          noAcc.style.fontSize = '0.8rem';
+          noAcc.style.color = 'var(--text-muted)';
+          noAcc.textContent = 'No channels connected yet. Click "+ Connect Channel / API" to link YouTube, X, LinkedIn, or Meta.';
+          accountsRow.appendChild(noAcc);
+        } else {
+          accounts.forEach((acc) => {
+            const badge = document.createElement('div');
+            badge.style.display = 'flex';
+            badge.style.alignItems = 'center';
+            badge.style.gap = '6px';
+            badge.style.background = 'var(--bg-surface)';
+            badge.style.border = '1px solid var(--border)';
+            badge.style.borderRadius = '16px';
+            badge.style.padding = '4px 10px';
+            badge.style.fontSize = '0.8rem';
+
+            const iconMap = { youtube: '🔴', x: '🐦', linkedin: '💼', instagram: '📸', threads: '🧵', facebook: '📘' };
+            const icon = iconMap[acc.platform.toLowerCase()] || '📡';
+
+            const textSpan = document.createElement('span');
+            textSpan.textContent = `${icon} ${acc.account_name} (${acc.platform.toUpperCase()})`;
+            badge.appendChild(textSpan);
+
+            const btnUnlink = document.createElement('button');
+            btnUnlink.textContent = '✕';
+            btnUnlink.style.background = 'transparent';
+            btnUnlink.style.border = 'none';
+            btnUnlink.style.color = 'var(--danger)';
+            btnUnlink.style.cursor = 'pointer';
+            btnUnlink.style.fontSize = '0.85rem';
+            btnUnlink.style.padding = '0 2px';
+            btnUnlink.title = 'Unlink Account';
+            btnUnlink.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              if (!confirm(`Unlink ${acc.platform} for ${client.name}?`)) return;
+              await fetch(`/api/accounts/${acc.id}`, { method: 'DELETE' });
+              showToast(`Unlinked ${acc.platform} account.`, 'info');
+              await fetchClients();
+              fetchStatus();
+            });
+            badge.appendChild(btnUnlink);
+
+            accountsRow.appendChild(badge);
+          });
+        }
+
+        card.appendChild(accountsRow);
         container.appendChild(card);
       }
     }
   } catch (err) {
     console.error('Error fetching clients:', err);
   }
+}
+
+function openChannelModal(clientId, clientName) {
+  const modal = document.getElementById('add-channel-modal');
+  const title = document.getElementById('modal-client-title');
+  const inputId = document.getElementById('modal-client-id');
+  const oauthBtn = document.getElementById('modal-yt-oauth-btn');
+
+  if (!modal) return;
+  inputId.value = String(clientId);
+  title.textContent = `Connect Channel to "${clientName}"`;
+  if (oauthBtn) {
+    oauthBtn.href = `/auth/youtube?clientId=${clientId}`;
+  }
+
+  // Reset inputs
+  document.getElementById('modal-account-name').value = '';
+  document.getElementById('modal-platform-select').value = 'youtube';
+  document.querySelectorAll('.cred-fields-block').forEach((b) => {
+    b.style.display = 'none';
+  });
+  const ytBlock = document.getElementById('cred-fields-youtube');
+  if (ytBlock) ytBlock.style.display = 'block';
+
+  modal.style.display = 'block';
+  modal.scrollIntoView({ behavior: 'smooth' });
 }
 
 // Toast Notification System

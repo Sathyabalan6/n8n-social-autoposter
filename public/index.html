@@ -18,8 +18,7 @@
     <nav class="nav-tabs">
       <button class="nav-tab active" data-target="tab-wizard">✍️ Compose</button>
       <button class="nav-tab" data-target="tab-queue">📋 Queue</button>
-      <button class="nav-tab" data-target="tab-clients">🏢 Clients</button>
-      <button class="nav-tab" data-target="tab-settings">⚙️ Settings</button>
+      <button class="nav-tab" data-target="tab-clients">🏢 Clients & Accounts</button>
     </nav>
 
     <!-- Header Client Selector & Status -->
@@ -603,15 +602,15 @@
       </div>
     </div>
 
-    <!-- TAB 3: CLIENTS & BRANDS -->
+    <!-- TAB 3: CLIENTS & ACCOUNTS (AGENCY WORKSPACE) -->
     <div id="tab-clients" class="tab-content" style="display: none;">
       <div class="card">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h2 class="card-title">🏢 Client Clusters</h2>
-            <p class="card-subtitle">Manage client profiles and link dedicated social channels.</p>
+            <h2 class="card-title">🏢 Client Brand Clusters & Connected APIs</h2>
+            <p class="card-subtitle">Manage client profiles and link dedicated social channels & API keys to each brand.</p>
           </div>
-          <button class="btn btn-primary" id="btn-add-client" style="padding: 8px 16px; font-size: 0.85rem;">+ Add Client</button>
+          <button class="btn btn-primary" id="btn-add-client" style="padding: 8px 16px; font-size: 0.85rem;">+ Add New Client</button>
         </div>
 
         <!-- Add Client Inline Form -->
@@ -620,59 +619,103 @@
           <div style="display: flex; gap: 12px; align-items: center;">
             <input type="text" id="new-client-name" placeholder="Client Name (e.g. Nike Running, Apex Dental)" style="flex: 1;">
             <input type="color" id="new-client-color" value="#3B82F6" style="width: 44px; height: 42px; border-radius: 6px; padding: 2px; cursor: pointer;">
-            <button class="btn btn-success" id="btn-save-new-client">Save</button>
+            <button class="btn btn-success" id="btn-save-new-client">Save Client</button>
             <button class="btn btn-secondary" id="btn-cancel-new-client">Cancel</button>
           </div>
         </div>
 
-        <div id="clients-list-container" style="display: grid; gap: 14px;">
-          <!-- Loaded dynamically -->
+        <!-- Add Channel Modal/Drawer for a Client -->
+        <div id="add-channel-modal" style="display: none; background: rgba(15, 23, 42, 0.98); border: 2px solid var(--accent); padding: 20px; border-radius: 12px; margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 id="modal-client-title" style="color: var(--accent);">Connect Channel to Client</h3>
+            <button class="btn btn-secondary" id="btn-close-channel-modal" style="padding: 4px 10px; font-size: 0.8rem;">✕ Close</button>
+          </div>
+          
+          <input type="hidden" id="modal-client-id">
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+            <div>
+              <label class="form-label" for="modal-platform-select">Platform</label>
+              <select id="modal-platform-select">
+                <option value="youtube">🔴 YouTube (Google OAuth)</option>
+                <option value="x">🐦 X / Twitter (API Keys)</option>
+                <option value="linkedin">💼 LinkedIn (Access Token)</option>
+                <option value="instagram">📸 Instagram (Meta Graph)</option>
+                <option value="threads">🧵 Threads (Meta API)</option>
+                <option value="facebook">📘 Facebook (Page Token)</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" for="modal-account-name">Account Label / Handle</label>
+              <input type="text" id="modal-account-name" placeholder="e.g. Official Channel, @brandhandle">
+            </div>
+          </div>
+
+          <!-- Dynamic Credentials Sub-Form -->
+          <div id="cred-fields-youtube" class="cred-fields-block" style="background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 10px;">Connect this client's YouTube channel via 1-click Google OAuth:</p>
+            <a href="#" id="modal-yt-oauth-btn" class="btn btn-primary" style="display: inline-block;">🔗 Authorize with Google for this Client</a>
+          </div>
+
+          <div id="cred-fields-x" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label" for="cred-x-apikey">API Key / Consumer Key</label>
+              <input type="text" id="cred-x-apikey" placeholder="Enter X API Key">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cred-x-token">Access Token / Bearer Token</label>
+              <input type="text" id="cred-x-token" placeholder="Enter X Access Token">
+            </div>
+          </div>
+
+          <div id="cred-fields-linkedin" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label" for="cred-li-token">LinkedIn Access Token</label>
+              <input type="text" id="cred-li-token" placeholder="Enter OAuth Access Token">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cred-li-urn">Person or Organization URN</label>
+              <input type="text" id="cred-li-urn" placeholder="urn:li:person:... or urn:li:organization:...">
+            </div>
+          </div>
+
+          <div id="cred-fields-instagram" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label" for="cred-ig-token">Meta Graph Access Token</label>
+              <input type="text" id="cred-ig-token" placeholder="Long-lived User or Page Token">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cred-ig-id">Instagram Business Account ID</label>
+              <input type="text" id="cred-ig-id" placeholder="178414000...">
+            </div>
+          </div>
+
+          <div id="cred-fields-threads" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cred-threads-token">Threads Access Token</label>
+              <input type="text" id="cred-threads-token" placeholder="Threads User Access Token">
+            </div>
+          </div>
+
+          <div id="cred-fields-facebook" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label" for="cred-fb-token">Facebook Page Access Token</label>
+              <input type="text" id="cred-fb-token" placeholder="Permanent Page Access Token">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cred-fb-pageid">Facebook Page ID</label>
+              <input type="text" id="cred-fb-pageid" placeholder="Page numeric ID">
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="btn btn-secondary" id="btn-cancel-modal">Cancel</button>
+            <button class="btn btn-success" id="btn-save-channel-creds">Save Credentials (AES-256 Encrypted)</button>
+          </div>
         </div>
-      </div>
-    </div>
 
-    <!-- TAB 4: SETTINGS & OAUTH -->
-    <div id="tab-settings" class="tab-content" style="display: none;">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">⚙️ Platform Integrations</h2>
-          <p class="card-subtitle">All tokens are AES-256-GCM encrypted and stored in local SQLite.</p>
-        </div>
-
-        <div style="display: grid; gap: 16px;">
-          <!-- YouTube Settings Card -->
-          <div style="background: var(--bg-primary); padding: 16px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <h3 style="display: flex; align-items: center; gap: 8px;">🔴 YouTube Data API v3</h3>
-              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">Upload standard videos and vertical YouTube Shorts.</p>
-              <div id="yt-auth-status" style="font-size: 0.8rem; margin-top: 6px; color: var(--warning);">Checking connection...</div>
-            </div>
-            <div>
-              <a href="/auth/youtube" class="btn btn-primary" id="btn-connect-yt">🔗 Connect YouTube</a>
-            </div>
-          </div>
-
-          <!-- X Settings Card -->
-          <div style="background: var(--bg-primary); padding: 16px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <h3 style="display: flex; align-items: center; gap: 8px;">🐦 X (Twitter) API v2</h3>
-              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">Configured via X_API_KEY in `.env`.</p>
-            </div>
-            <div>
-              <span class="badge badge-warning">Config in .env</span>
-            </div>
-          </div>
-
-          <!-- LinkedIn Settings Card -->
-          <div style="background: var(--bg-primary); padding: 16px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <h3 style="display: flex; align-items: center; gap: 8px;">💼 LinkedIn Posts API</h3>
-              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">Configured via LINKEDIN_ACCESS_TOKEN in `.env`.</p>
-            </div>
-            <div>
-              <span class="badge badge-warning">Config in .env</span>
-            </div>
-          </div>
+        <div id="clients-list-container" style="display: grid; gap: 16px;">
+          <!-- Loaded dynamically with connected accounts badges -->
         </div>
       </div>
     </div>
