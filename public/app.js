@@ -1,6 +1,8 @@
 // --- STATE MANAGEMENT ---
 const state = {
   selectedPlatforms: ['youtube', 'x', 'linkedin'],
+  activeClientId: 1,
+  clients: [],
   masterMedia: { file: null, url: null, type: null },
   platformMedia: {
     youtube: { file: null, url: null, type: null, custom: false },
@@ -110,6 +112,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPlatformCustomMedia();
   setupLiveSync();
   setupWizardNavigation();
+  setupClientsManager();
+  fetchClients();
   fetchStatus();
   fetchQueue();
 });
@@ -688,6 +692,7 @@ async function submitPost() {
   el.btnPublishFinal.textContent = '⏳ Processing & Publishing...';
 
   const formData = new FormData();
+  formData.append('client_id', state.activeClientId);
   formData.append('master_text', el.masterText.value.trim());
   formData.append('master_hashtags', el.masterHashtags.value.trim());
   formData.append('platforms', JSON.stringify(state.selectedPlatforms));
@@ -778,7 +783,8 @@ async function submitPost() {
 // --- QUEUE & HISTORY ---
 async function fetchQueue() {
   try {
-    const res = await fetch('/api/posts');
+    const url = state.activeClientId ? `/api/posts?clientId=${state.activeClientId}` : '/api/posts';
+    const res = await fetch(url);
     const data = await res.json();
     clearElement(el.postsTableBody);
 
@@ -920,6 +926,179 @@ async function fetchStatus() {
     }
   } catch (err) {
     console.error('Error fetching status:', err);
+  }
+}
+
+// --- AGENCY CLIENTS & ACCOUNTS MANAGER ---
+function setupClientsManager() {
+  const headerSelect = document.getElementById('header-client-select');
+  const wizardSelect = document.getElementById('wizard-client-select');
+  const btnAddClient = document.getElementById('btn-add-client');
+  const addClientForm = document.getElementById('add-client-form');
+  const btnSaveClient = document.getElementById('btn-save-new-client');
+  const btnCancelClient = document.getElementById('btn-cancel-new-client');
+  const newClientName = document.getElementById('new-client-name');
+  const newClientColor = document.getElementById('new-client-color');
+
+  if (headerSelect) {
+    headerSelect.addEventListener('change', () => {
+      state.activeClientId = parseInt(headerSelect.value, 10);
+      if (wizardSelect) wizardSelect.value = state.activeClientId;
+      showToast(`Switched active client workspace.`, 'info');
+      fetchStatus();
+      fetchQueue();
+    });
+  }
+
+  if (wizardSelect) {
+    wizardSelect.addEventListener('change', () => {
+      state.activeClientId = parseInt(wizardSelect.value, 10);
+      if (headerSelect) headerSelect.value = state.activeClientId;
+      fetchStatus();
+    });
+  }
+
+  if (btnAddClient) {
+    btnAddClient.addEventListener('click', () => {
+      addClientForm.style.display = 'block';
+      newClientName.focus();
+    });
+  }
+
+  if (btnCancelClient) {
+    btnCancelClient.addEventListener('click', () => {
+      addClientForm.style.display = 'none';
+      newClientName.value = '';
+    });
+  }
+
+  if (btnSaveClient) {
+    btnSaveClient.addEventListener('click', async () => {
+      const name = newClientName.value.trim();
+      const color = newClientColor.value;
+      if (!name) {
+        showToast('Please enter a client brand name.', 'warning');
+        return;
+      }
+      try {
+        const res = await fetch('/api/clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, color_code: color })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Client "${name}" added to agency workspace!`, 'success');
+          addClientForm.style.display = 'none';
+          newClientName.value = '';
+          await fetchClients();
+          fetchQueue();
+        } else {
+          showToast(`Error creating client: ${data.error}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Network error: ${err.message}`, 'error');
+      }
+    });
+  }
+}
+
+async function fetchClients() {
+  try {
+    const res = await fetch('/api/clients');
+    const data = await res.json();
+    if (!data.success) return;
+
+    state.clients = data.clients;
+    const headerSelect = document.getElementById('header-client-select');
+    const wizardSelect = document.getElementById('wizard-client-select');
+    const container = document.getElementById('clients-list-container');
+
+    // Populate dropdowns using safe DOM methods
+    if (headerSelect && wizardSelect) {
+      clearElement(headerSelect);
+      clearElement(wizardSelect);
+      state.clients.forEach((c) => {
+        const opt1 = document.createElement('option');
+        opt1.value = String(c.id);
+        opt1.textContent = c.name;
+        headerSelect.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = String(c.id);
+        opt2.textContent = c.name;
+        wizardSelect.appendChild(opt2);
+      });
+      headerSelect.value = String(state.activeClientId);
+      wizardSelect.value = String(state.activeClientId);
+    }
+
+    // Populate Clients & Accounts cards
+    if (container) {
+      clearElement(container);
+      for (const client of state.clients) {
+        const card = document.createElement('div');
+        card.style.background = 'var(--bg-primary)';
+        card.style.border = `1px solid var(--border)`;
+        card.style.borderLeft = `6px solid ${client.color_code || '#3B82F6'}`;
+        card.style.borderRadius = '8px';
+        card.style.padding = '16px 20px';
+        card.style.display = 'flex';
+        card.style.justifyContent = 'space-between';
+        card.style.alignItems = 'center';
+
+        const infoDiv = document.createElement('div');
+        const h3 = document.createElement('h3');
+        h3.style.display = 'flex';
+        h3.style.alignItems = 'center';
+        h3.style.gap = '8px';
+        h3.textContent = client.name;
+
+        const sub = document.createElement('p');
+        sub.style.fontSize = '0.85rem';
+        sub.style.color = 'var(--text-secondary)';
+        sub.style.marginTop = '4px';
+        sub.textContent = `Client ID #${client.id} • Registered ${new Date(client.created_at).toLocaleDateString()}`;
+
+        infoDiv.appendChild(h3);
+        infoDiv.appendChild(sub);
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.style.display = 'flex';
+        actionsDiv.style.gap = '8px';
+
+        const btnConnect = document.createElement('a');
+        btnConnect.href = `/auth/youtube?clientId=${client.id}`;
+        btnConnect.className = 'btn btn-primary';
+        btnConnect.style.padding = '6px 14px';
+        btnConnect.style.fontSize = '0.8rem';
+        btnConnect.textContent = '🔗 Connect YouTube for this Client';
+
+        actionsDiv.appendChild(btnConnect);
+
+        if (client.id !== 1) {
+          const btnDel = document.createElement('button');
+          btnDel.className = 'btn btn-secondary';
+          btnDel.style.padding = '6px 10px';
+          btnDel.style.fontSize = '0.8rem';
+          btnDel.textContent = '🗑️ Delete';
+          btnDel.addEventListener('click', async () => {
+            if (!confirm(`Delete client "${client.name}" and all associated posts?`)) return;
+            await fetch(`/api/clients/${client.id}`, { method: 'DELETE' });
+            showToast(`Client deleted.`, 'info');
+            await fetchClients();
+            fetchQueue();
+          });
+          actionsDiv.appendChild(btnDel);
+        }
+
+        card.appendChild(infoDiv);
+        card.appendChild(actionsDiv);
+        container.appendChild(card);
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching clients:', err);
   }
 }
 

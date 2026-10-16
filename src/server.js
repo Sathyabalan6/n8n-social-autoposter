@@ -65,11 +65,12 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // --- API ROUTES ---
 
 // 1. Health check & status
-app.get('/api/status', (_req, res) => {
-  const ytTokens = getStoredTokens();
+app.get('/api/status', (req, res) => {
+  const clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
+  const ytTokens = getStoredTokens(clientId);
   res.json({
     status: 'ok',
-    version: '1.0.0',
+    version: '1.1.0',
     platforms: {
       youtube: {
         configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
@@ -82,6 +83,65 @@ app.get('/api/status', (_req, res) => {
       facebook: { configured: Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID) }
     }
   });
+});
+
+// --- AGENCY CLIENTS & ACCOUNTS ROUTES ---
+app.get('/api/clients', (_req, res) => {
+  try {
+    const clients = db.getClients();
+    res.json({ success: true, clients });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/clients', (req, res) => {
+  try {
+    const { name, color_code } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Client name is required' });
+    }
+    const client = db.createClient(name.trim(), color_code || '#3B82F6');
+    res.json({ success: true, client });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/clients/:id', (req, res) => {
+  try {
+    db.deleteClient(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/clients/:id/accounts', (req, res) => {
+  try {
+    const accounts = db.getAccountsByClient(req.params.id);
+    res.json({ success: true, accounts });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/accounts', (_req, res) => {
+  try {
+    const accounts = db.getAllAccounts();
+    res.json({ success: true, accounts });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/accounts/:id', (req, res) => {
+  try {
+    db.deleteAccount(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // 2. Live Validation & Preview compiler
@@ -139,8 +199,11 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       }
     }
 
+    const clientId = body.client_id ? parseInt(body.client_id, 10) : 1;
+
     const postRecord = {
       ...compiled,
+      client_id: clientId,
       media_path: mediaPath,
       media_filename: mediaFilename,
       media_mimetype: mediaMimetype,
@@ -175,10 +238,11 @@ app.post('/api/posts', uploadFields, async (req, res) => {
   }
 });
 
-// 4. List all posts (Queue & History)
-app.get('/api/posts', (_req, res) => {
+// 4. List all posts (Queue & History, optionally filtered by client)
+app.get('/api/posts', (req, res) => {
   try {
-    const posts = db.getAllPosts();
+    const clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
+    const posts = db.getAllPosts(clientId);
     res.json({ success: true, posts });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -196,9 +260,10 @@ app.delete('/api/posts/:id', (req, res) => {
 });
 
 // --- GOOGLE OAUTH ROUTES ---
-app.get('/auth/youtube', (_req, res) => {
+app.get('/auth/youtube', (req, res) => {
   try {
-    const url = getAuthUrl();
+    const clientId = req.query.clientId ? String(req.query.clientId) : '1';
+    const url = getAuthUrl(clientId);
     const parsedUrl = new URL(url);
     if (parsedUrl.origin !== 'https://accounts.google.com') {
       throw new Error('Untrusted redirect target');
@@ -212,20 +277,21 @@ app.get('/auth/youtube', (_req, res) => {
 
 app.get('/auth/youtube/callback', async (req, res) => {
   const code = req.query.code;
+  const stateParam = req.query.state; // contains clientId!
   if (!code) {
     return res.status(400).send('Missing authorization code from Google.');
   }
 
   try {
-    await handleAuthCallback(code);
+    await handleAuthCallback(code, stateParam);
     res.send(`
       <!DOCTYPE html>
       <html>
         <head><title>YouTube Connected</title></head>
-        <body style="font-family: system-ui, sans-serif; text-align: center; padding: 50px;">
+        <body style="font-family: system-ui, sans-serif; text-align: center; padding: 50px; background: #0f172a; color: #f8fafc;">
           <h1 style="color: #10B981;">YouTube Connected Successfully!</h1>
-          <p>Your OAuth tokens have been stored. You can close this tab and return to the dashboard.</p>
-          <a href="/" style="display: inline-block; padding: 10px 20px; background: #2563EB; color: white; text-decoration: none; border-radius: 6px; margin-top: 20px;">Return to Dashboard</a>
+          <p>Your OAuth tokens have been encrypted and linked to this client profile.</p>
+          <a href="/" style="display: inline-block; padding: 12px 24px; background: #3B82F6; color: white; text-decoration: none; border-radius: 8px; margin-top: 20px; font-weight: 600;">Return to Dashboard</a>
         </body>
       </html>
     `);

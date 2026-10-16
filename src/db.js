@@ -16,10 +16,31 @@ try {
   console.warn('[DB] Pragma initialization warning:', e.message);
 }
 
-// Initialize tables with DAG state machine & lease locking
+// 1. Core Agency Tables: clients, social_accounts, posts, settings
 db.exec(`
+  CREATE TABLE IF NOT EXISTS clients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color_code TEXT DEFAULT '#3B82F6',
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS social_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    platform TEXT NOT NULL,
+    account_name TEXT NOT NULL,
+    account_handle TEXT,
+    avatar_url TEXT,
+    encrypted_tokens TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'completed',
     scheduled_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
@@ -54,8 +75,9 @@ db.exec(`
   );
 `);
 
-// Safe migrations for existing databases (run individually so one existing column doesn't block the rest)
+// Safe migrations for existing databases
 const migrations = [
+  'ALTER TABLE posts ADD COLUMN client_id INTEGER DEFAULT 1;',
   'ALTER TABLE posts ADD COLUMN first_comment TEXT;',
   'ALTER TABLE posts ADD COLUMN worker_id TEXT;',
   'ALTER TABLE posts ADD COLUMN locked_until INTEGER DEFAULT 0;',
@@ -67,7 +89,7 @@ for (const sql of migrations) {
   try {
     db.exec(sql);
   } catch {
-    // Column already exists or table already updated
+    // Column already exists
   }
 }
 
@@ -75,6 +97,18 @@ try {
   db.exec(`ALTER TABLE settings ADD COLUMN encrypted INTEGER DEFAULT 0;`);
 } catch {
   // Column already exists
+}
+
+// Seed default clients if empty
+const countClients = db.prepare('SELECT COUNT(*) as c FROM clients').get();
+if (countClients.c === 0) {
+  const now = new Date().toISOString();
+  db.exec(`
+    INSERT INTO clients (name, color_code, created_at) VALUES 
+    ('Main Agency Brand', '#3B82F6', '${now}'),
+    ('Client Alpha (E-commerce)', '#10B981', '${now}'),
+    ('Client Beta (Tech Startup)', '#8B5CF6', '${now}');
+  `);
 }
 
 function safeJsonParse(jsonString, fallback) {
@@ -86,15 +120,16 @@ function safeJsonParse(jsonString, fallback) {
   }
 }
 
+// Prepared Statements
 const stmtInsert = db.prepare(`
   INSERT INTO posts (
-    status, scheduled_at, created_at, updated_at, master_text, master_hashtags,
+    client_id, status, scheduled_at, created_at, updated_at, master_text, master_hashtags,
     media_path, media_filename, media_mimetype, media_overrides, platforms,
     youtube_title, youtube_tags, youtube_privacy,
     x_post, linkedin_post, instagram_caption, threads_post, facebook_post,
     results, error_summary, first_comment, attempts
   ) VALUES (
-    ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
     ?, ?, ?,
     ?, ?, ?, ?, ?,
@@ -102,10 +137,38 @@ const stmtInsert = db.prepare(`
   )
 `);
 
-const stmtGetAll = db.prepare(`SELECT * FROM posts ORDER BY id DESC`);
+const stmtGetAll = db.prepare(`
+  SELECT p.*, c.name as client_name, c.color_code as client_color 
+  FROM posts p 
+  LEFT JOIN clients c ON p.client_id = c.id 
+  ORDER BY p.id DESC
+`);
+
+const stmtGetByClient = db.prepare(`
+  SELECT p.*, c.name as client_name, c.color_code as client_color 
+  FROM posts p 
+  LEFT JOIN clients c ON p.client_id = c.id 
+  WHERE p.client_id = ? 
+  ORDER BY p.id DESC
+`);
+
 const stmtGetById = db.prepare(`SELECT * FROM posts WHERE id = ?`);
 const stmtUpdateStatus = db.prepare(`UPDATE posts SET status = ?, updated_at = ?, results = ?, error_summary = ? WHERE id = ?`);
 const stmtDelete = db.prepare(`DELETE FROM posts WHERE id = ?`);
+
+// Clients Statements
+const stmtGetClients = db.prepare(`SELECT * FROM clients ORDER BY id ASC`);
+const stmtInsertClient = db.prepare(`INSERT INTO clients (name, color_code, created_at) VALUES (?, ?, ?)`);
+const stmtDeleteClient = db.prepare(`DELETE FROM clients WHERE id = ?`);
+
+// Social Accounts Statements
+const stmtGetAccountsByClient = db.prepare(`SELECT * FROM social_accounts WHERE client_id = ? AND is_active = 1`);
+const stmtGetAllAccounts = db.prepare(`SELECT a.*, c.name as client_name FROM social_accounts a JOIN clients c ON a.client_id = c.id WHERE a.is_active = 1`);
+const stmtUpsertAccount = db.prepare(`
+  INSERT INTO social_accounts (client_id, platform, account_name, account_handle, avatar_url, encrypted_tokens, is_active, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+`);
+const stmtDeleteAccount = db.prepare(`DELETE FROM social_accounts WHERE id = ?`);
 
 const stmtGetSetting = db.prepare(`SELECT value, encrypted FROM settings WHERE key = ?`);
 const stmtSetSetting = db.prepare(`INSERT INTO settings (key, value, encrypted) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, encrypted = excluded.encrypted`);
@@ -115,6 +178,7 @@ module.exports = {
   insertPost: (post) => {
     const now = new Date().toISOString();
     const result = stmtInsert.run(
+      post.client_id || 1,
       post.status || 'completed',
       post.scheduled_at || now,
       now,
@@ -141,8 +205,8 @@ module.exports = {
     );
     return result.lastInsertRowid;
   },
-  getAllPosts: () => {
-    const rows = stmtGetAll.all();
+  getAllPosts: (clientId = null) => {
+    const rows = clientId ? stmtGetByClient.all(clientId) : stmtGetAll.all();
     return rows.map(r => ({
       ...r,
       media_overrides: safeJsonParse(r.media_overrides, {}),
@@ -160,16 +224,11 @@ module.exports = {
       results: safeJsonParse(row.results, {})
     };
   },
-  /**
-   * Atomically claims the next due or zombie task using lease-time locking.
-   * Eliminates concurrency races without Redis!
-   */
   claimNextJob: (workerId, leaseDurationMs = 30000) => {
     const nowMs = Date.now();
     const nowIso = new Date(nowMs).toISOString();
     const lockedUntil = nowMs + leaseDurationMs;
 
-    // Find candidate job: either due 'scheduled' OR abandoned/crashed 'claimed' whose lease expired
     const candidateStmt = db.prepare(`
       SELECT id FROM posts 
       WHERE (status = 'scheduled' AND scheduled_at <= ?)
@@ -180,7 +239,6 @@ module.exports = {
     const candidate = candidateStmt.get(nowIso, nowMs);
     if (!candidate) return null;
 
-    // Atomically lock candidate
     const lockStmt = db.prepare(`
       UPDATE posts 
       SET status = 'claimed', 
@@ -193,7 +251,7 @@ module.exports = {
 
     const result = lockStmt.run(workerId, lockedUntil, nowIso, candidate.id, nowMs);
     if (result.changes === 0) {
-      return null; // Another worker claimed it in between
+      return null;
     }
 
     const job = stmtGetById.get(candidate.id);
@@ -211,6 +269,44 @@ module.exports = {
   deletePost: (id) => {
     stmtDelete.run(id);
   },
+  // Clients API
+  getClients: () => stmtGetClients.all(),
+  createClient: (name, color = '#3B82F6') => {
+    const now = new Date().toISOString();
+    const res = stmtInsertClient.run(name, color, now);
+    return { id: res.lastInsertRowid, name, color_code: color, created_at: now };
+  },
+  deleteClient: (id) => stmtDeleteClient.run(id),
+  // Social Accounts API
+  getAccountsByClient: (clientId) => {
+    const rows = stmtGetAccountsByClient.all(clientId);
+    return rows.map(r => ({
+      ...r,
+      tokens: r.encrypted_tokens ? safeJsonParse(decrypt(r.encrypted_tokens), null) : null
+    }));
+  },
+  getAllAccounts: () => {
+    const rows = stmtGetAllAccounts.all();
+    return rows.map(r => ({
+      id: r.id,
+      client_id: r.client_id,
+      client_name: r.client_name,
+      platform: r.platform,
+      account_name: r.account_name,
+      account_handle: r.account_handle,
+      avatar_url: r.avatar_url,
+      has_tokens: Boolean(r.encrypted_tokens),
+      created_at: r.created_at
+    }));
+  },
+  saveAccountTokens: (clientId, platform, accountName, handle, avatarUrl, tokens) => {
+    const now = new Date().toISOString();
+    const encTokens = encrypt(JSON.stringify(tokens));
+    const res = stmtUpsertAccount.run(clientId, platform, accountName, handle || '', avatarUrl || '', encTokens, now);
+    return res.lastInsertRowid;
+  },
+  deleteAccount: (id) => stmtDeleteAccount.run(id),
+  // Settings API
   getSetting: (key) => {
     const row = stmtGetSetting.get(key);
     if (!row) return null;

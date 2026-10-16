@@ -14,7 +14,17 @@ function getOAuth2Client() {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
-function getStoredTokens() {
+function getStoredTokens(clientId = null) {
+  // If clientId is provided, query client's specific account
+  if (clientId) {
+    const clientAccounts = db.getAccountsByClient(clientId);
+    const ytAccount = clientAccounts.find((a) => a.platform === 'youtube');
+    if (ytAccount && ytAccount.tokens) {
+      return ytAccount.tokens;
+    }
+  }
+
+  // Fallback to global vault tokens
   const tokensJson = db.getSetting('youtube_tokens');
   if (tokensJson) {
     try {
@@ -26,12 +36,17 @@ function getStoredTokens() {
   return null;
 }
 
-function saveTokens(tokens) {
-  // Store encrypted using AES-256-GCM envelope encryption
+function saveTokens(tokens, clientId = null, accountName = 'YouTube Channel') {
+  // 1. Save globally in encrypted settings
   db.setSetting('youtube_tokens', tokens, true);
+
+  // 2. Save linked to client account if clientId provided
+  if (clientId) {
+    db.saveAccountTokens(clientId, 'youtube', accountName, '@channel', '', tokens);
+  }
 }
 
-function getAuthUrl() {
+function getAuthUrl(clientId = null) {
   const oauth2Client = getOAuth2Client();
   const scopes = [
     'https://www.googleapis.com/auth/youtube.upload',
@@ -41,24 +56,26 @@ function getAuthUrl() {
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
-    prompt: 'consent'
+    prompt: 'consent',
+    state: clientId ? String(clientId) : '1'
   });
 }
 
-async function handleAuthCallback(code) {
+async function handleAuthCallback(code, stateParam = null) {
   const oauth2Client = getOAuth2Client();
   const { tokens } = await oauth2Client.getToken(code);
-  saveTokens(tokens);
+  const clientId = stateParam ? parseInt(stateParam, 10) : 1;
+  saveTokens(tokens, clientId, 'YouTube Channel');
   return tokens;
 }
 
 async function publishYouTube(post) {
-  const tokens = getStoredTokens();
+  const tokens = getStoredTokens(post.client_id);
   if (!tokens || (!tokens.refresh_token && !tokens.access_token)) {
     return {
       platform: 'youtube',
       success: false,
-      error: 'YouTube is not connected. Please connect your YouTube account via settings or /auth/youtube.'
+      error: 'YouTube is not connected for this client. Please connect YouTube via Settings.'
     };
   }
 
@@ -82,7 +99,7 @@ async function publishYouTube(post) {
       console.log('[YouTube Adapter] Proactive token refresh (T-5 min window)...');
       const refreshed = await oauth2Client.refreshAccessToken();
       const newCreds = { ...tokens, ...refreshed.credentials };
-      saveTokens(newCreds);
+      saveTokens(newCreds, post.client_id);
       oauth2Client.setCredentials(newCreds);
     } catch (refreshErr) {
       console.warn('[YouTube Adapter] Proactive refresh attempt error:', refreshErr.message);
@@ -92,14 +109,14 @@ async function publishYouTube(post) {
   // Auto-listen for refreshed tokens during requests
   oauth2Client.on('tokens', (newTokens) => {
     const updated = { ...tokens, ...newTokens };
-    saveTokens(updated);
+    saveTokens(updated, post.client_id);
   });
 
   const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
 
   const tags = (post.youtube_tags || '')
     .split(',')
-    .map(t => t.trim())
+    .map((t) => t.trim())
     .filter(Boolean);
 
   const requestBody = {

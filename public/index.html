@@ -18,7 +18,16 @@
     <div class="nav-tabs">
       <button class="nav-tab active" data-target="tab-wizard">✍️ Create Post</button>
       <button class="nav-tab" data-target="tab-queue">📋 Queue & History</button>
+      <button class="nav-tab" data-target="tab-clients">🏢 Clients & Brands</button>
       <button class="nav-tab" data-target="tab-settings">⚙️ Settings</button>
+    </div>
+
+    <!-- Agency Client Selector -->
+    <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-primary); padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border);">
+      <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">CLIENT:</span>
+      <select id="header-client-select" style="background: transparent; border: none; color: var(--text-primary); font-weight: 600; font-size: 0.85rem; padding: 4px; cursor: pointer; outline: none; width: auto;">
+        <!-- Dynamically loaded -->
+      </select>
     </div>
 
     <div class="status-chips">
@@ -50,6 +59,14 @@
             <div class="card-header">
               <h2 class="card-title">Step 1 of 3: Core Post & Channels</h2>
               <p class="card-subtitle">Draft your central thought, attach default media, and select target channels.</p>
+            </div>
+
+            <!-- Client Assignment -->
+            <div class="form-group" style="background: rgba(59, 130, 246, 0.08); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+              <label class="form-label" for="wizard-client-select" style="color: var(--accent); margin-bottom: 4px;">🏢 Target Client / Brand</label>
+              <select id="wizard-client-select" style="background: var(--bg-primary);">
+                <!-- Populated dynamically -->
+              </select>
             </div>
 
             <div class="form-group">
@@ -626,7 +643,35 @@
       </div>
     </div>
 
-    <!-- TAB 3: SETTINGS & OAUTH -->
+    <!-- TAB 3: CLIENTS & BRANDS (AGENCY WORKSPACE) -->
+    <div id="tab-clients" class="tab-content" style="display: none;">
+      <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h2 class="card-title">🏢 Client Clusters & Connected Accounts</h2>
+            <p class="card-subtitle">Manage client profiles and their dedicated clusters of social channels.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-add-client" style="padding: 8px 16px; font-size: 0.85rem;">+ Add New Client</button>
+        </div>
+
+        <!-- Add Client Modal/Inline Form -->
+        <div id="add-client-form" style="display: none; background: var(--bg-primary); padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border);">
+          <h4 style="margin-bottom: 12px;">Add New Client / Brand</h4>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <input type="text" id="new-client-name" placeholder="Client Name (e.g. Nike Athletics, Apex Dental)" style="flex: 1;">
+            <input type="color" id="new-client-color" value="#3B82F6" style="width: 48px; height: 42px; border-radius: 6px; padding: 2px; cursor: pointer;">
+            <button class="btn btn-success" id="btn-save-new-client">Save Client</button>
+            <button class="btn btn-secondary" id="btn-cancel-new-client">Cancel</button>
+          </div>
+        </div>
+
+        <div id="clients-list-container" style="display: grid; gap: 16px;">
+          <!-- Loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: SETTINGS & OAUTH -->
     <div id="tab-settings" class="tab-content" style="display: none;">
       <div class="card">
         <div class="card-header">
