@@ -15,9 +15,9 @@
         "formFields": {
           "values": [
             { "fieldLabel": "Master Description / Content", "fieldType": "textarea", "requiredField": true },
-            { "fieldLabel": "Master Hashtags", "fieldType": "text", "requiredField": false },
-            { "fieldLabel": "Media Attachment", "fieldType": "file", "requiredField": false },
-            { "fieldLabel": "Schedule Time (Leave blank for immediate)", "fieldType": "date", "requiredField": false },
+            { "fieldLabel": "Master Hashtags" },
+            { "fieldLabel": "Media Attachment", "fieldType": "file" },
+            { "fieldLabel": "Schedule Time (Leave blank for immediate)", "fieldType": "date" },
             {
               "fieldLabel": "Select Platforms to Publish",
               "fieldType": "checkbox",
@@ -32,11 +32,11 @@
                 ]
               }
             },
-            { "fieldLabel": "YouTube Video Title", "fieldType": "text", "requiredField": false },
-            { "fieldLabel": "X (Twitter) Custom Copy (max 280 chars)", "fieldType": "textarea", "requiredField": false },
-            { "fieldLabel": "LinkedIn Custom Copy", "fieldType": "textarea", "requiredField": false },
-            { "fieldLabel": "Instagram Custom Caption", "fieldType": "textarea", "requiredField": false },
-            { "fieldLabel": "Threads Custom Copy", "fieldType": "textarea", "requiredField": false }
+            { "fieldLabel": "YouTube Video Title" },
+            { "fieldLabel": "X (Twitter) Custom Copy (max 280 chars)", "fieldType": "textarea" },
+            { "fieldLabel": "LinkedIn Custom Copy", "fieldType": "textarea" },
+            { "fieldLabel": "Instagram Custom Caption", "fieldType": "textarea" },
+            { "fieldLabel": "Threads Custom Copy", "fieldType": "textarea" }
           ]
         },
         "options": {}
@@ -47,9 +47,9 @@
       "name": "Normalize Form Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [340, 200],
+      "position": [1280, 192],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\nconst now = new Date().toISOString();\n\nconst selected = Array.isArray(data['Select Platforms to Publish'])\n  ? data['Select Platforms to Publish']\n  : (data['Select Platforms to Publish'] ? [data['Select Platforms to Publish']] : []);\n\nconst hasPlatform = (name) => selected.some(p => String(p).toLowerCase().includes(name.toLowerCase()));\nconst postYouTube = hasPlatform('youtube') || Boolean(data['YouTube Video Title'] && data['YouTube Video Title'].trim());\n\nconst baseText = data['Master Description / Content'] || '';\nconst baseTags = data['Master Hashtags'] ? (' ' + data['Master Hashtags'].trim()) : '';\n\nconst xText = ((data['X (Twitter) Custom Copy (max 280 chars)'] && data['X (Twitter) Custom Copy (max 280 chars)'].trim()) || baseText).slice(0, 270) + baseTags;\nconst linkedinText = ((data['LinkedIn Custom Copy'] && data['LinkedIn Custom Copy'].trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\nconst facebookText = baseText + (baseTags ? ('\\n\\n' + baseTags) : '');\nconst igCaption = ((data['Instagram Custom Caption'] && data['Instagram Custom Caption'].trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\nconst threadsText = ((data['Threads Custom Copy'] && data['Threads Custom Copy'].trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\nconst ytTitle = ((data['YouTube Video Title'] && data['YouTube Video Title'].trim()) || baseText).slice(0, 100);\n\nconst binaryIn = $input.item.binary || {};\nconst binaryOut = {};\nif (binaryIn.Media_Attachment) {\n  binaryOut.data = binaryIn.Media_Attachment;\n}\n\nreturn {\n  json: {\n    status: 'completed',\n    master_text: baseText,\n    master_hashtags: data['Master Hashtags'] || '',\n    post_to_x: hasPlatform('x') || hasPlatform('twitter'),\n    post_to_linkedin: hasPlatform('linkedin'),\n    post_to_facebook: hasPlatform('facebook'),\n    post_to_instagram: hasPlatform('instagram'),\n    post_to_threads: hasPlatform('threads'),\n    post_to_youtube: postYouTube,\n    x_post: xText,\n    linkedin_post: linkedinText,\n    facebook_post: facebookText,\n    instagram_caption: igCaption,\n    threads_post: threadsText,\n    youtube_title: ytTitle\n  },\n  binary: binaryOut\n};"
+        "jsCode": "const data = $input.item.json;\nconst now = new Date();\n\nconst selected = Array.isArray(data['Select Platforms to Publish'])\n  ? data['Select Platforms to Publish']\n  : (data['Select Platforms to Publish'] ? [data['Select Platforms to Publish']] : []);\n\nconst hasPlatform = (name) => selected.some(p => String(p).toLowerCase().includes(name.toLowerCase()));\nconst postYouTube = hasPlatform('youtube') || Boolean(data['YouTube Video Title'] && data['YouTube Video Title'].trim());\n\nconst baseText = data['Master Description / Content'] || '';\nconst rawTags = data['Master Hashtags'] || '';\n\n// Format tags for YouTube: remove '#' and join with comma\nconst ytTags = rawTags\n  .split(/[\\s,]+/)\n  .map(t => t.replace(/^#/, '').trim())\n  .filter(Boolean)\n  .join(', ');\n\n// Format hashtags for social text: ensure '#' prefix\nconst socialTags = rawTags\n  .split(/[\\s,]+/)\n  .map(t => t.trim())\n  .filter(Boolean)\n  .map(t => t.startsWith('#') ? t : ('#' + t))\n  .join(' ');\n\n// Check scheduling: if date provided, parse it\nlet scheduledAt = now.toISOString();\nlet isScheduled = false;\n\nconst rawDate = data['Schedule Time (Leave blank for immediate)'];\nif (rawDate && String(rawDate).trim()) {\n  const parsedDate = new Date(rawDate);\n  if (!isNaN(parsedDate.getTime()) && parsedDate.getTime() > now.getTime()) {\n    scheduledAt = parsedDate.toISOString();\n    isScheduled = true;\n  }\n}\n\nconst status = isScheduled ? 'scheduled' : 'completed';\n\n// Map binary: if Media_Attachment exists, map it to 'data' for YouTube\nconst binaryIn = $input.item.binary || {};\nconst binaryOut = {};\nif (binaryIn.Media_Attachment) {\n  binaryOut.data = binaryIn.Media_Attachment;\n}\n\nreturn {\n  json: {\n    status: status,\n    scheduled_at: scheduledAt,\n    master_text: baseText,\n    master_hashtags: ytTags,\n    media_url: '',\n    post_to_x: hasPlatform('x') || hasPlatform('twitter'),\n    post_to_linkedin: hasPlatform('linkedin'),\n    post_to_facebook: hasPlatform('facebook'),\n    post_to_instagram: hasPlatform('instagram'),\n    post_to_threads: hasPlatform('threads'),\n    post_to_youtube: postYouTube,\n    x_override: data['X (Twitter) Custom Copy (max 280 chars)'] || '',\n    linkedin_override: data['LinkedIn Custom Copy'] || '',\n    instagram_override: data['Instagram Custom Caption'] || '',\n    threads_override: data['Threads Custom Copy'] || '',\n    youtube_title: (data['YouTube Video Title'] && data['YouTube Video Title'].trim()) || baseText.slice(0, 100)\n  },\n  binary: binaryOut\n};"
       }
     },
     {
@@ -57,6 +57,7 @@
       "name": "Enqueue Post to Queue Table",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
+      "onError": "continueRegularOutput",
       "position": [592, 192],
       "parameters": {
         "dataTableId": { "mode": "id", "value": "04Y6TGIEdNDWPCp7" },
@@ -81,17 +82,17 @@
       "name": "Fetch Scheduled Posts",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [352, 688],
+      "position": [-208, 1120],
       "parameters": {
         "operation": "get",
         "dataTableId": { "mode": "id", "value": "04Y6TGIEdNDWPCp7" },
+        "matchType": "allConditions",
         "filters": {
           "conditions": [
-            { "keyName": "status", "condition": "eq", "keyValue": "scheduled" }
+            { "keyName": "status", "keyValue": "scheduled" }
           ]
         },
-        "returnAll": true,
-        "matchType": "allConditions"
+        "returnAll": true
       }
     },
     {
@@ -99,7 +100,7 @@
       "name": "Filter Due Posts & Format Content",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [592, 688],
+      "position": [256, 912],
       "parameters": {
         "jsCode": "const items = $input.all();\nconst now = new Date().getTime();\nconst due = [];\n\nfor (const item of items) {\n  const row = item.json;\n  const postTime = new Date(row.scheduled_at || 0).getTime();\n  \n  if (postTime <= now) {\n    const baseText = row.master_text || '';\n    const baseTags = row.master_hashtags ? (' ' + row.master_hashtags.trim()) : '';\n\n    const xText = ((row.x_override && row.x_override.trim()) || baseText).slice(0, 270) + baseTags;\n    const linkedinText = ((row.linkedin_override && row.linkedin_override.trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\n    const facebookText = baseText + (baseTags ? ('\\n\\n' + baseTags) : '');\n    const igCaption = ((row.instagram_override && row.instagram_override.trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\n    const threadsText = ((row.threads_override && row.threads_override.trim()) || baseText) + (baseTags ? ('\\n\\n' + baseTags) : '');\n    const ytTitle = ((row.youtube_title && row.youtube_title.trim()) || baseText).slice(0, 100);\n\n    due.push({\n      json: {\n        ...row,\n        x_post: xText,\n        linkedin_post: linkedinText,\n        facebook_post: facebookText,\n        instagram_caption: igCaption,\n        threads_post: threadsText,\n        youtube_title: ytTitle\n      }\n    });\n  }\n}\n\nreturn due;"
       }
@@ -112,9 +113,9 @@
       "onError": "continueRegularOutput",
       "position": [848, 480],
       "parameters": {
-        "resource": "row",
         "operation": "update",
         "dataTableId": { "mode": "id", "value": "04Y6TGIEdNDWPCp7" },
+        "matchType": "allConditions",
         "filters": {
           "conditions": [
             { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.id }}" }
@@ -124,7 +125,7 @@
           "mappingMode": "defineBelow",
           "value": { "status": "completed" }
         },
-        "matchType": "allConditions"
+        "options": {}
       }
     },
     {
@@ -304,7 +305,8 @@
         "title": "={{ $json.youtube_title }}",
         "options": {
           "description": "={{ $json.master_text }}",
-          "tags": "={{ $json.master_hashtags }}"
+          "tags": "={{ $json.master_hashtags }}",
+          "privacyStatus": "unlisted"
         }
       },
       "credentials": {
