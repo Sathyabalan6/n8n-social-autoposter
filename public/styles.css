@@ -157,30 +157,6 @@ header {
   width: auto;
 }
 
-.status-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  padding: 4px 10px;
-  border-radius: 20px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-muted);
-}
-
-.status-dot.active {
-  background: var(--success);
-  box-shadow: 0 0 8px var(--success);
-}
-
 /* Layout */
 main {
   max-width: 1440px;

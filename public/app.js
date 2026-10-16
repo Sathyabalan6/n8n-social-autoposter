@@ -935,22 +935,28 @@ async function deletePost(id) {
 // --- STATUS & SETTINGS ---
 async function fetchStatus() {
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch(`/api/status?clientId=${state.activeClientId}`);
     const data = await res.json();
-    const yt = data.platforms.youtube;
-
-    if (yt.connected) {
-      el.dotYouTube.classList.add('active');
-      el.ytAuthStatus.textContent = '✅ Connected and Authorized with Google OAuth';
-      el.ytAuthStatus.style.color = 'var(--success)';
-    } else if (yt.configured) {
-      el.dotYouTube.classList.remove('active');
-      el.ytAuthStatus.textContent = '⚠️ Configured in .env, but needs Authorization click';
-      el.ytAuthStatus.style.color = 'var(--warning)';
-    } else {
-      el.dotYouTube.classList.remove('active');
-      el.ytAuthStatus.textContent = '❌ Credentials missing in .env';
-      el.ytAuthStatus.style.color = 'var(--danger)';
+    if (el.dotYouTube) {
+      const yt = data.platforms.youtube;
+      if (yt.connected) {
+        el.dotYouTube.classList.add('active');
+      } else {
+        el.dotYouTube.classList.remove('active');
+      }
+    }
+    if (el.ytAuthStatus) {
+      const yt = data.platforms.youtube;
+      if (yt.connected) {
+        el.ytAuthStatus.textContent = '✅ Connected and Authorized with Google OAuth';
+        el.ytAuthStatus.style.color = 'var(--success)';
+      } else if (yt.configured) {
+        el.ytAuthStatus.textContent = '⚠️ Configured in .env, but needs Authorization click';
+        el.ytAuthStatus.style.color = 'var(--warning)';
+      } else {
+        el.ytAuthStatus.textContent = '❌ Credentials missing in .env';
+        el.ytAuthStatus.style.color = 'var(--danger)';
+      }
     }
   } catch (err) {
     console.error('Error fetching status:', err);
