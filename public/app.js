@@ -2,42 +2,29 @@
 const state = {
   selectedPlatforms: ['youtube', 'x', 'linkedin'],
   activeClientId: 1,
+  editingPostId: null,
   clients: [],
   masterMedia: { file: null, url: null, type: null },
   platformMedia: {
-    youtube: { file: null, url: null, type: null, custom: false },
-    x: { file: null, url: null, type: null, custom: false },
-    linkedin: { file: null, url: null, type: null, custom: false },
-    instagram: { file: null, url: null, type: null, custom: false },
-    threads: { file: null, url: null, type: null, custom: false },
-    facebook: { file: null, url: null, type: null, custom: false }
+    youtube: { file: null, url: null, type: null, mode: 'master' },
+    x: { file: null, url: null, type: null, mode: 'master' },
+    linkedin: { file: null, url: null, type: null, mode: 'master' },
+    instagram: { file: null, url: null, type: null, mode: 'master' },
+    threads: { file: null, url: null, type: null, mode: 'master' },
+    facebook: { file: null, url: null, type: null, mode: 'master' }
   },
-  currentStep: 1,
-  activeStudioPlatform: 'youtube',
+  activeLens: 'master',
   currentPreviewTab: 'youtube'
-};
-
-const PLATFORMS_META = {
-  youtube: { name: 'YouTube', icon: '🔴', panelId: 'panel-youtube' },
-  x: { name: 'X (Twitter)', icon: '🐦', panelId: 'panel-x' },
-  linkedin: { name: 'LinkedIn', icon: '💼', panelId: 'panel-linkedin' },
-  instagram: { name: 'Instagram', icon: '📸', panelId: 'panel-instagram' },
-  threads: { name: 'Threads', icon: '🧵', panelId: 'panel-threads' },
-  facebook: { name: 'Facebook', icon: '📘', panelId: 'panel-facebook' }
 };
 
 // --- DOM ELEMENTS ---
 const el = {
-  // Tabs
   navTabs: document.querySelectorAll('.nav-tab'),
   tabContents: document.querySelectorAll('.tab-content'),
 
-  // Wizard Steps
-  step1: document.getElementById('step-1'),
-  step2: document.getElementById('step-2'),
-  step3: document.getElementById('step-3'),
+  composerTitle: document.getElementById('composer-mode-title'),
+  editingIndicator: document.getElementById('editing-indicator'),
 
-  // Step 1 Inputs
   masterText: document.getElementById('master_text'),
   masterHashtags: document.getElementById('master_hashtags'),
   dropzoneMaster: document.getElementById('dropzone-master'),
@@ -49,10 +36,8 @@ const el = {
   scheduleInputs: document.getElementById('schedule-inputs'),
   scheduleDate: document.getElementById('schedule_date'),
   scheduleTime: document.getElementById('schedule_time'),
-  btnGotoStep2: document.getElementById('btn-goto-step-2'),
 
-  // Step 2 Studio Controls
-  studioNavBar: document.getElementById('studio-nav-bar'),
+  lensTabs: document.querySelectorAll('.lens-tab'),
   ytTitle: document.getElementById('youtube_title'),
   ytPrivacy: document.getElementById('youtube_privacy'),
   xOverride: document.getElementById('x_override'),
@@ -60,25 +45,16 @@ const el = {
   igOverride: document.getElementById('instagram_override'),
   threadsOverride: document.getElementById('threads_override'),
   fbOverride: document.getElementById('facebook_override'),
-  btnBacktoStep1: document.getElementById('btn-backto-step-1'),
-  btnGotoStep3: document.getElementById('btn-goto-step-3'),
 
-  // Step 3
-  sumChannels: document.getElementById('sum-channels'),
-  sumTiming: document.getElementById('sum-timing'),
-  sumMedia: document.getElementById('sum-media'),
-  approvalCheckbox: document.getElementById('approval-checkbox'),
-  btnBacktoStep2: document.getElementById('btn-backto-step-2'),
   btnPublishFinal: document.getElementById('btn-publish-final'),
   btnSaveDraft: document.getElementById('btn-save-draft'),
 
-  // Char Counts
   masterCharCount: document.getElementById('master-char-count'),
   ytCharCount: document.getElementById('yt-char-count'),
   xCharCount: document.getElementById('x-char-count'),
   liCharCount: document.getElementById('li-char-count'),
+  threadsCharCount: document.getElementById('threads-char-count'),
 
-  // Previews
   previewTabs: document.querySelectorAll('.preview-tab'),
   previewCards: document.querySelectorAll('.preview-card'),
   ytPreviewTitle: document.getElementById('yt-preview-title'),
@@ -97,29 +73,24 @@ const el = {
   fbPreviewText: document.getElementById('fb-preview-text'),
   fbPreviewMedia: document.getElementById('fb-preview-media'),
 
-  // Queue Tab
   btnRefreshQueue: document.getElementById('btn-refresh-queue'),
-  postsTableBody: document.getElementById('posts-table-body'),
-
-  // Status & Auth
-  dotYouTube: document.getElementById('dot-youtube'),
-  ytAuthStatus: document.getElementById('yt-auth-status')
+  postsTableBody: document.getElementById('posts-table-body')
 };
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
   setupNavigation();
+  setupLensSwitcher();
   setupMasterMediaUpload();
   setupPlatformCustomMedia();
   setupLiveSync();
-  setupWizardNavigation();
+  setupComposerActions();
   setupClientsManager();
   fetchClients();
-  fetchStatus();
   fetchQueue();
 });
 
-// --- NAVIGATION TABS ---
+// --- NAVIGATION ---
 function setupNavigation() {
   el.navTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -133,33 +104,33 @@ function setupNavigation() {
       document.getElementById(targetId).style.display = 'block';
 
       if (targetId === 'tab-queue') fetchQueue();
-      if (targetId === 'tab-settings') fetchStatus();
+      if (targetId === 'tab-clients') fetchClients();
     });
   });
 
-  // Preview Tabs click
   el.previewTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       switchPreviewCard(tab.getAttribute('data-preview'));
     });
   });
 
-  // Timing Radios
   el.timingRadios.forEach((radio) => {
     radio.addEventListener('change', () => {
       if (radio.value === 'scheduled') {
         el.scheduleInputs.style.display = 'flex';
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        el.scheduleDate.value = tomorrow.toISOString().split('T')[0];
+        if (!el.scheduleDate.value) {
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          el.scheduleDate.value = tomorrow.toISOString().split('T')[0];
+        }
+        el.btnPublishFinal.textContent = 'Schedule Post';
       } else {
         el.scheduleInputs.style.display = 'none';
+        el.btnPublishFinal.textContent = state.editingPostId ? 'Update Post' : 'Publish Post';
       }
-      updateReviewSummary();
     });
   });
 
-  // Step 1 Platform Checklist Cards
   el.platformCards.forEach((card) => {
     card.addEventListener('click', () => {
       const p = card.getAttribute('data-platform');
@@ -169,9 +140,38 @@ function setupNavigation() {
       } else {
         state.selectedPlatforms = state.selectedPlatforms.filter((x) => x !== p);
       }
-      updateReviewSummary();
     });
   });
+}
+
+// --- UNIFIED LENS SWITCHER (AUTO-SYNCS PREVIEW) ---
+function setupLensSwitcher() {
+  el.lensTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const lens = tab.getAttribute('data-lens');
+      switchEditorLens(lens);
+    });
+  });
+}
+
+function switchEditorLens(lens) {
+  state.activeLens = lens;
+
+  el.lensTabs.forEach((t) => {
+    t.classList.toggle('active', t.getAttribute('data-lens') === lens);
+  });
+
+  document.querySelectorAll('.lens-pane').forEach((pane) => {
+    pane.style.display = 'none';
+  });
+
+  const targetPane = document.getElementById(`panel-${lens}`);
+  if (targetPane) targetPane.style.display = 'block';
+
+  // Auto-sync right-side preview card when clicking a specific platform lens
+  if (lens !== 'master') {
+    switchPreviewCard(lens);
+  }
 }
 
 function switchPreviewCard(platform) {
@@ -222,15 +222,14 @@ function setupMasterMediaUpload() {
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-remove-media';
-    removeBtn.textContent = '✕ Remove';
+    removeBtn.textContent = 'Remove';
     removeBtn.addEventListener('click', () => el.btnRemoveMasterMedia.click());
     el.previewMaster.appendChild(removeBtn);
 
     el.previewMaster.style.display = 'none';
-    el.dropzoneMaster.style.display = 'block';
+    el.dropzoneMaster.style.display = 'flex';
 
     renderAllPreviewMedia();
-    updateReviewSummary();
   });
 }
 
@@ -257,7 +256,7 @@ function handleMasterFile(file) {
 
   const removeBtn = document.createElement('button');
   removeBtn.className = 'btn-remove-media';
-  removeBtn.textContent = '✕ Remove';
+  removeBtn.textContent = 'Remove';
   removeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     el.btnRemoveMasterMedia.click();
@@ -265,15 +264,13 @@ function handleMasterFile(file) {
   el.previewMaster.appendChild(removeBtn);
 
   renderAllPreviewMedia();
-  updateReviewSummary();
 }
 
-// --- PLATFORM CUSTOM MEDIA HANDLERS ---
+// --- PLATFORM CUSTOM MEDIA OVERRIDES ---
 function setupPlatformCustomMedia() {
   const platforms = ['youtube', 'x', 'linkedin', 'instagram', 'threads', 'facebook'];
 
   platforms.forEach((p) => {
-    // Radio toggle
     const radios = document.querySelectorAll(`input[name="media_source_${p}"]`);
     const customBox = document.getElementById(`custom-media-box-${p}`);
     const dropzone = document.getElementById(`dropzone-${p}`);
@@ -326,7 +323,7 @@ function setupPlatformCustomMedia() {
 
           const rem = document.createElement('button');
           rem.className = 'btn-remove-media';
-          rem.textContent = '✕ Remove';
+          rem.textContent = 'Remove';
           rem.addEventListener('click', (ev) => {
             ev.stopPropagation();
             removeBtn.click();
@@ -334,7 +331,6 @@ function setupPlatformCustomMedia() {
           previewContainer.appendChild(rem);
 
           renderPreviewMedia(p);
-          updateReviewSummary();
         }
       });
     }
@@ -349,43 +345,32 @@ function setupPlatformCustomMedia() {
         clearElement(previewContainer);
         const rem = document.createElement('button');
         rem.className = 'btn-remove-media';
-        rem.textContent = '✕ Remove';
+        rem.textContent = 'Remove';
         rem.addEventListener('click', () => removeBtn.click());
         previewContainer.appendChild(rem);
 
         previewContainer.style.display = 'none';
-        dropzone.style.display = 'block';
+        dropzone.style.display = 'flex';
         renderPreviewMedia(p);
-        updateReviewSummary();
       });
     }
   });
 }
 
-// Get the active media object for a platform
 function getEffectiveMedia(platform) {
   const custom = state.platformMedia[platform];
-  const mode = custom ? custom.mode || (custom.custom ? 'custom' : 'master') : 'master';
+  const mode = custom ? custom.mode : 'master';
 
-  // 1. Explicitly disabled media for this channel
   if (mode === 'none') {
     return { file: null, url: null, type: null };
   }
-
-  // 2. Custom media uploaded for this channel
   if (mode === 'custom') {
-    if (custom && custom.url) {
-      return custom;
-    }
-    // When custom is chosen but no file is selected yet, vanish the master media!
+    if (custom && custom.url) return custom;
     return { file: null, url: null, type: null };
   }
-
-  // 3. Default: inherit master media
   return state.masterMedia;
 }
 
-// Render media inside social cards
 function renderPreviewMedia(platform) {
   const media = getEffectiveMedia(platform);
 
@@ -412,7 +397,7 @@ function renderPreviewMedia(platform) {
     } else {
       if (desktopPlayer) desktopPlayer.classList.remove('has-video');
       const s = document.createElement('span');
-      s.textContent = '▶ Video Preview';
+      s.textContent = '16:9 Video Canvas';
       el.ytPreviewPlayer.appendChild(s);
     }
   } else if (platform === 'x') {
@@ -422,9 +407,6 @@ function renderPreviewMedia(platform) {
       const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
       elMedia.src = media.url;
       if (media.type === 'video') elMedia.controls = true;
-      elMedia.style.width = '100%';
-      elMedia.style.maxHeight = '250px';
-      elMedia.style.objectFit = 'cover';
       el.xPreviewMedia.appendChild(elMedia);
     } else {
       el.xPreviewMedia.style.display = 'none';
@@ -436,9 +418,6 @@ function renderPreviewMedia(platform) {
       const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
       elMedia.src = media.url;
       if (media.type === 'video') elMedia.controls = true;
-      elMedia.style.width = '100%';
-      elMedia.style.maxHeight = '250px';
-      elMedia.style.objectFit = 'cover';
       el.liPreviewMedia.appendChild(elMedia);
     } else {
       if (el.liPreviewMediaCard) el.liPreviewMediaCard.style.display = 'none';
@@ -449,13 +428,10 @@ function renderPreviewMedia(platform) {
       const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
       elMedia.src = media.url;
       if (media.type === 'video') elMedia.controls = true;
-      elMedia.style.width = '100%';
-      elMedia.style.height = '100%';
-      elMedia.style.objectFit = 'cover';
       el.igPreviewPlayer.appendChild(elMedia);
     } else {
       const s = document.createElement('span');
-      s.textContent = 'Photo / Reel Preview';
+      s.textContent = '4:5 Media Canvas';
       el.igPreviewPlayer.appendChild(s);
     }
   } else if (platform === 'threads') {
@@ -465,9 +441,6 @@ function renderPreviewMedia(platform) {
       const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
       elMedia.src = media.url;
       if (media.type === 'video') elMedia.controls = true;
-      elMedia.style.width = '100%';
-      elMedia.style.maxHeight = '220px';
-      elMedia.style.objectFit = 'cover';
       el.threadsPreviewMedia.appendChild(elMedia);
     } else {
       el.threadsPreviewMedia.style.display = 'none';
@@ -479,9 +452,6 @@ function renderPreviewMedia(platform) {
       const elMedia = media.type === 'video' ? document.createElement('video') : document.createElement('img');
       elMedia.src = media.url;
       if (media.type === 'video') elMedia.controls = true;
-      elMedia.style.width = '100%';
-      elMedia.style.maxHeight = '220px';
-      elMedia.style.objectFit = 'cover';
       el.fbPreviewMedia.appendChild(elMedia);
     } else {
       el.fbPreviewMedia.style.display = 'none';
@@ -491,60 +461,6 @@ function renderPreviewMedia(platform) {
 
 function renderAllPreviewMedia() {
   ['youtube', 'x', 'linkedin', 'instagram', 'threads', 'facebook'].forEach(renderPreviewMedia);
-}
-
-// --- DYNAMIC STEP 2 STUDIO TABS ---
-function buildStudioNavBar() {
-  clearElement(el.studioNavBar);
-
-  const activePlatforms = state.selectedPlatforms.filter((p) => PLATFORMS_META[p]);
-  if (!activePlatforms.length) {
-    const notice = document.createElement('div');
-    notice.style.padding = '8px 12px';
-    notice.style.color = 'var(--warning)';
-    notice.textContent = 'No channels selected. Please select at least one channel in Step 1.';
-    el.studioNavBar.appendChild(notice);
-    return;
-  }
-
-  // Ensure activeStudioPlatform is among selected
-  if (!activePlatforms.includes(state.activeStudioPlatform)) {
-    state.activeStudioPlatform = activePlatforms[0];
-  }
-
-  activePlatforms.forEach((p) => {
-    const meta = PLATFORMS_META[p];
-    const btn = document.createElement('button');
-    btn.className = `studio-tab-btn ${state.activeStudioPlatform === p ? 'active' : ''}`;
-    btn.textContent = `${meta.icon} ${meta.name} Studio`;
-
-    btn.addEventListener('click', () => {
-      switchStudioPlatform(p);
-    });
-
-    el.studioNavBar.appendChild(btn);
-  });
-
-  switchStudioPlatform(state.activeStudioPlatform);
-}
-
-function switchStudioPlatform(platform) {
-  state.activeStudioPlatform = platform;
-
-  // Highlight studio button
-  document.querySelectorAll('.studio-tab-btn').forEach((b) => {
-    b.classList.toggle('active', b.textContent.includes(PLATFORMS_META[platform].name));
-  });
-
-  // Show only this platform's panel
-  document.querySelectorAll('.platform-panel').forEach((p) => {
-    p.style.display = 'none';
-  });
-  const targetPanel = document.getElementById(PLATFORMS_META[platform].panelId);
-  if (targetPanel) targetPanel.style.display = 'block';
-
-  // AUTO-SYNC RIGHT PANE PREVIEW CARD!
-  switchPreviewCard(platform);
 }
 
 // --- LIVE TEXT SYNC & PREVIEWS ---
@@ -563,90 +479,50 @@ function updateLivePreviews() {
   const master = el.masterText.value.trim();
   const rawTags = el.masterHashtags.value.trim();
 
-  el.masterCharCount.textContent = `${master.length} characters`;
+  el.masterCharCount.textContent = `${master.length} chars`;
 
-  // 1. YouTube Preview
-  const ytTitle = el.ytTitle.value.trim() || master.slice(0, 70) || 'Your Video Title Here';
+  // 1. YouTube
+  const ytTitle = el.ytTitle.value.trim() || master.slice(0, 70) || 'Untitled Video';
   el.ytPreviewTitle.textContent = ytTitle;
   el.ytCharCount.textContent = `${ytTitle.length}/100`;
   el.ytCharCount.className = `char-count ${ytTitle.length > 90 ? 'warning' : ''}`;
-  el.ytPreviewDesc.textContent = master ? `${master}\n\n${rawTags}` : 'Video description will appear here...';
+  el.ytPreviewDesc.textContent = master ? `${master}\n\n${rawTags}` : 'Description preview...';
 
-  // 2. X Preview
+  // 2. X
   const xOverride = el.xOverride.value.trim();
   const xTags = rawTags.split(/[\s,]+/).filter(Boolean).slice(0, 2).map((t) => (t.startsWith('#') ? t : `#${t}`)).join(' ');
-  const xText = xOverride || (master ? `${master} ${xTags}`.trim() : "What's happening? Type in the editor to see live tweet preview...");
+  const xText = xOverride || (master ? `${master} ${xTags}`.trim() : 'Post text will render here...');
   el.xPreviewText.textContent = xText;
   el.xCharCount.textContent = `${xText.length}/280`;
   el.xCharCount.className = `char-count ${xText.length > 280 ? 'danger' : (xText.length > 250 ? 'warning' : '')}`;
 
-  // 3. LinkedIn Preview
+  // 3. LinkedIn
   const liOverride = el.liOverride.value.trim();
   const liTags = rawTags.split(/[\s,]+/).filter(Boolean).slice(0, 5).map((t) => `#${t.replace(/^#/, '')}`).join(' ');
-  const liText = liOverride || (master ? `${master}\n\n${liTags}` : 'LinkedIn post narrative will appear here...');
+  const liText = liOverride || (master ? `${master}\n\n${liTags}` : 'Post narrative will render here...');
   el.liPreviewText.textContent = liText;
   el.liCharCount.textContent = `${liText.length}/3000`;
 
-  // 4. Instagram Preview
+  // 4. Instagram
   const igOverride = el.igOverride.value.trim();
-  const igCaption = igOverride || (master ? `${master}\n\n${rawTags}` : 'Instagram caption...');
+  const igCaption = igOverride || (master ? `${master}\n\n${rawTags}` : 'Caption preview...');
   el.igPreviewCaption.textContent = igCaption;
 
-  // 5. Threads Preview
+  // 5. Threads
   const threadsOverride = el.threadsOverride.value.trim();
-  const threadsText = threadsOverride || master || 'Threads update preview...';
+  const threadsText = threadsOverride || master || 'Threads post preview...';
   el.threadsPreviewText.textContent = threadsText;
+  if (el.threadsCharCount) el.threadsCharCount.textContent = `${threadsText.length}/500`;
   const topicTag = rawTags.split(/[\s,]+/).find(Boolean) || '';
-  el.threadsTopicPill.textContent = topicTag ? `#${topicTag.replace(/^[#.&]+/, '')}` : '#topic';
+  el.threadsTopicPill.textContent = topicTag ? topicTag.replace(/^[#.&]+/, '') : 'topic';
 
-  // 6. Facebook Preview
+  // 6. Facebook
   const fbOverride = el.fbOverride ? el.fbOverride.value.trim() : '';
-  el.fbPreviewText.textContent = fbOverride || master || 'Facebook post copy...';
+  el.fbPreviewText.textContent = fbOverride || master || 'Facebook post preview...';
 }
 
-// --- WIZARD NAVIGATION ---
-function setupWizardNavigation() {
-  el.btnGotoStep2.addEventListener('click', () => {
-    if (!el.masterText.value.trim()) {
-      alert('Please enter your Master Post Content before proceeding.');
-      el.masterText.focus();
-      return;
-    }
-    if (!state.selectedPlatforms.length) {
-      alert('Please select at least one channel to publish to.');
-      return;
-    }
-
-    el.step1.style.display = 'none';
-    el.step2.style.display = 'block';
-    state.currentStep = 2;
-
-    buildStudioNavBar();
-  });
-
-  el.btnBacktoStep1.addEventListener('click', () => {
-    el.step2.style.display = 'none';
-    el.step1.style.display = 'block';
-    state.currentStep = 1;
-  });
-
-  el.btnGotoStep3.addEventListener('click', () => {
-    el.step2.style.display = 'none';
-    el.step3.style.display = 'block';
-    state.currentStep = 3;
-    updateReviewSummary();
-  });
-
-  el.btnBacktoStep2.addEventListener('click', () => {
-    el.step3.style.display = 'none';
-    el.step2.style.display = 'block';
-    state.currentStep = 2;
-  });
-
-  el.approvalCheckbox.addEventListener('change', () => {
-    el.btnPublishFinal.disabled = !el.approvalCheckbox.checked;
-  });
-
+// --- COMPOSER ACTIONS ---
+function setupComposerActions() {
   el.btnPublishFinal.addEventListener('click', () => submitPost('publish'));
   if (el.btnSaveDraft) {
     el.btnSaveDraft.addEventListener('click', () => submitPost('draft'));
@@ -654,50 +530,24 @@ function setupWizardNavigation() {
   el.btnRefreshQueue.addEventListener('click', fetchQueue);
 }
 
-function updateReviewSummary() {
-  const names = state.selectedPlatforms.map((p) => {
-    const meta = PLATFORMS_META[p];
-    return meta ? `${meta.icon} ${meta.name}` : p;
-  });
-
-  clearElement(el.sumChannels);
-  appendBoldLabel(el.sumChannels, '📡 Channels: ', names.join(', ') || 'None selected');
-
-  clearElement(el.sumTiming);
-  const isSched = document.querySelector('input[name="timing"]:checked').value === 'scheduled';
-  if (isSched) {
-    appendBoldLabel(el.sumTiming, '⏰ Timing: ', `Scheduled for ${el.scheduleDate.value || 'tomorrow'} at ${el.scheduleTime.value || '14:30'} IST`);
-  } else {
-    appendBoldLabel(el.sumTiming, '⏰ Timing: ', 'Immediate Publish 🚀');
-  }
-
-  clearElement(el.sumMedia);
-  const mediaDetails = [];
-  if (state.masterMedia.file) {
-    mediaDetails.push(`Master: ${state.masterMedia.file.name}`);
-  }
-  Object.keys(state.platformMedia).forEach((p) => {
-    const pm = state.platformMedia[p];
-    if (pm.custom && pm.file) {
-      mediaDetails.push(`${PLATFORMS_META[p].name} Custom: ${pm.file.name}`);
-    }
-  });
-
-  if (mediaDetails.length) {
-    appendBoldLabel(el.sumMedia, '📁 Media: ', mediaDetails.join(' | '));
-  } else {
-    appendBoldLabel(el.sumMedia, '📁 Media: ', 'Text only (No media)');
-  }
-}
-
-// --- SUBMIT POST (Draft, Scheduled, or Immediate) ---
 async function submitPost(action = 'publish') {
+  if (!el.masterText.value.trim()) {
+    showToast('Post copy cannot be empty.', 'warning');
+    switchEditorLens('master');
+    el.masterText.focus();
+    return;
+  }
+  if (!state.selectedPlatforms.length) {
+    showToast('Select at least one target channel.', 'warning');
+    return;
+  }
+
   const isEditing = Boolean(state.editingPostId);
   const submitBtn = action === 'draft' ? el.btnSaveDraft : el.btnPublishFinal;
 
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.textContent = action === 'draft' ? '⏳ Saving Draft...' : '⏳ Processing & Publishing...';
+    submitBtn.textContent = action === 'draft' ? 'Saving...' : 'Dispatching...';
   }
 
   const formData = new FormData();
@@ -713,40 +563,38 @@ async function submitPost(action = 'publish') {
     formData.append('schedule_time', el.scheduleTime.value);
   }
 
-  // Master media
   if (state.masterMedia.file) {
     formData.append('media', state.masterMedia.file);
   }
 
-  // Overrides & Custom per-platform media
   if (el.ytTitle.value.trim()) formData.append('youtube_title', el.ytTitle.value.trim());
   formData.append('youtube_privacy', el.ytPrivacy.value);
-  if (state.platformMedia.youtube.custom && state.platformMedia.youtube.file) {
+  if (state.platformMedia.youtube.mode === 'custom' && state.platformMedia.youtube.file) {
     formData.append('media_youtube', state.platformMedia.youtube.file);
   }
 
   if (el.xOverride.value.trim()) formData.append('x_override', el.xOverride.value.trim());
-  if (state.platformMedia.x.custom && state.platformMedia.x.file) {
+  if (state.platformMedia.x.mode === 'custom' && state.platformMedia.x.file) {
     formData.append('media_x', state.platformMedia.x.file);
   }
 
   if (el.liOverride.value.trim()) formData.append('linkedin_override', el.liOverride.value.trim());
-  if (state.platformMedia.linkedin.custom && state.platformMedia.linkedin.file) {
+  if (state.platformMedia.linkedin.mode === 'custom' && state.platformMedia.linkedin.file) {
     formData.append('media_linkedin', state.platformMedia.linkedin.file);
   }
 
   if (el.igOverride.value.trim()) formData.append('instagram_override', el.igOverride.value.trim());
-  if (state.platformMedia.instagram.custom && state.platformMedia.instagram.file) {
+  if (state.platformMedia.instagram.mode === 'custom' && state.platformMedia.instagram.file) {
     formData.append('media_instagram', state.platformMedia.instagram.file);
   }
 
   if (el.threadsOverride.value.trim()) formData.append('threads_override', el.threadsOverride.value.trim());
-  if (state.platformMedia.threads.custom && state.platformMedia.threads.file) {
+  if (state.platformMedia.threads.mode === 'custom' && state.platformMedia.threads.file) {
     formData.append('media_threads', state.platformMedia.threads.file);
   }
 
   if (el.fbOverride && el.fbOverride.value.trim()) formData.append('facebook_override', el.fbOverride.value.trim());
-  if (state.platformMedia.facebook.custom && state.platformMedia.facebook.file) {
+  if (state.platformMedia.facebook.mode === 'custom' && state.platformMedia.facebook.file) {
     formData.append('media_facebook', state.platformMedia.facebook.file);
   }
 
@@ -754,47 +602,45 @@ async function submitPost(action = 'publish') {
     const endpoint = isEditing ? `/api/posts/${state.editingPostId}` : '/api/posts';
     const method = isEditing ? 'PUT' : 'POST';
 
-    const res = await fetch(endpoint, {
-      method,
-      body: formData
-    });
-
+    const res = await fetch(endpoint, { method, body: formData });
     const data = await res.json();
+
     if (data.success) {
-      const msg = action === 'draft' ? 'Draft Saved Successfully! 💾' : (isSched ? 'Scheduled Successfully! ⏰' : 'Published Successfully! 🚀');
-      showToast(`🎉 Post #${data.postId} ${msg}`, 'success');
+      const msg = action === 'draft' ? 'saved as draft' : (isSched ? 'scheduled' : 'dispatched');
+      showToast(`Post #${data.postId} ${msg}.`, 'success');
 
-      // Reset Form & Editing State
-      state.editingPostId = null;
-      el.masterText.value = '';
-      el.masterHashtags.value = '';
-      el.ytTitle.value = '';
-      el.xOverride.value = '';
-      el.liOverride.value = '';
-      el.igOverride.value = '';
-      el.threadsOverride.value = '';
-      if (el.fbOverride) el.fbOverride.value = '';
-
-      el.btnRemoveMasterMedia.click();
-      el.approvalCheckbox.checked = false;
-
-      // Return to Step 1 & open queue
-      el.step3.style.display = 'none';
-      el.step1.style.display = 'block';
-      state.currentStep = 1;
-
+      resetComposerForm();
       document.querySelector('[data-target="tab-queue"]').click();
     } else {
-      showToast(`Error saving post: ${data.error}`, 'error');
+      showToast(`Error: ${data.error}`, 'error');
     }
   } catch (err) {
-    showToast(`Network error submitting post: ${err.message}`, 'error');
+    showToast(`Network error: ${err.message}`, 'error');
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.textContent = action === 'draft' ? '💾 Save as Draft' : '🚀 Approve & Publish';
+      submitBtn.textContent = action === 'draft' ? 'Save Draft' : (isSched ? 'Schedule Post' : 'Publish Post');
     }
   }
+}
+
+function resetComposerForm() {
+  state.editingPostId = null;
+  if (el.composerTitle) el.composerTitle.textContent = 'New Post';
+  if (el.editingIndicator) el.editingIndicator.textContent = '';
+
+  el.masterText.value = '';
+  el.masterHashtags.value = '';
+  el.ytTitle.value = '';
+  el.xOverride.value = '';
+  el.liOverride.value = '';
+  el.igOverride.value = '';
+  el.threadsOverride.value = '';
+  if (el.fbOverride) el.fbOverride.value = '';
+
+  el.btnRemoveMasterMedia.click();
+  switchEditorLens('master');
+  updateLivePreviews();
 }
 
 // --- QUEUE & HISTORY ---
@@ -811,8 +657,8 @@ async function fetchQueue() {
       td.colSpan = 6;
       td.style.textAlign = 'center';
       td.style.color = 'var(--text-muted)';
-      td.style.padding = '24px';
-      td.textContent = 'No posts in history or queue yet.';
+      td.style.padding = '32px';
+      td.textContent = 'No posts in queue for this client workspace.';
       tr.appendChild(td);
       el.postsTableBody.appendChild(tr);
       return;
@@ -821,24 +667,22 @@ async function fetchQueue() {
     data.posts.forEach((post) => {
       const tr = document.createElement('tr');
 
-      // ID
       const tdId = document.createElement('td');
-      const boldId = document.createElement('strong');
-      boldId.textContent = `#${post.id}`;
-      tdId.appendChild(boldId);
+      tdId.style.fontFamily = 'var(--font-mono)';
+      tdId.style.color = 'var(--text-muted)';
+      tdId.textContent = `#${post.id}`;
       tr.appendChild(tdId);
 
-      // Content Preview
       const tdContent = document.createElement('td');
-      tdContent.style.maxWidth = '320px';
+      tdContent.style.maxWidth = '340px';
       const divTitle = document.createElement('div');
-      divTitle.style.fontWeight = '600';
+      divTitle.style.fontWeight = '500';
       divTitle.style.whiteSpace = 'nowrap';
       divTitle.style.overflow = 'hidden';
       divTitle.style.textOverflow = 'ellipsis';
-      divTitle.textContent = post.youtube_title || post.master_text.slice(0, 40);
+      divTitle.textContent = post.youtube_title || post.master_text.slice(0, 48);
       const divText = document.createElement('div');
-      divText.style.fontSize = '0.8rem';
+      divText.style.fontSize = '12px';
       divText.style.color = 'var(--text-muted)';
       divText.style.whiteSpace = 'nowrap';
       divText.style.overflow = 'hidden';
@@ -848,24 +692,23 @@ async function fetchQueue() {
       tdContent.appendChild(divText);
       tr.appendChild(tdContent);
 
-      // Channels
       const tdChannels = document.createElement('td');
       (post.platforms || []).forEach((p) => {
         const span = document.createElement('span');
-        span.className = 'badge';
-        span.style.background = '#334155';
+        span.className = 'badge badge-draft';
         span.style.marginRight = '4px';
         span.textContent = p;
         tdChannels.appendChild(span);
       });
       tr.appendChild(tdChannels);
 
-      // Scheduled At
       const tdSched = document.createElement('td');
+      tdSched.style.fontFamily = 'var(--font-mono)';
+      tdSched.style.fontSize = '12px';
+      tdSched.style.color = 'var(--text-secondary)';
       tdSched.textContent = new Date(post.scheduled_at).toLocaleString();
       tr.appendChild(tdSched);
 
-      // Status
       const tdStatus = document.createElement('td');
       const spanStatus = document.createElement('span');
       const statusClass = post.status === 'completed'
@@ -876,36 +719,38 @@ async function fetchQueue() {
       tdStatus.appendChild(spanStatus);
       tr.appendChild(tdStatus);
 
-      // Actions
       const tdActions = document.createElement('td');
+      tdActions.style.textAlign = 'right';
+
       if (post.results?.youtube?.url) {
         const aYt = document.createElement('a');
         aYt.href = post.results.youtube.url;
         aYt.target = '_blank';
-        aYt.style.color = 'var(--accent)';
-        aYt.style.textDecoration = 'none';
-        aYt.style.marginRight = '8px';
-        aYt.textContent = '▶ YouTube';
+        aYt.className = 'btn btn-ghost';
+        aYt.style.padding = '4px 8px';
+        aYt.style.fontSize = '12px';
+        aYt.style.marginRight = '4px';
+        aYt.textContent = 'View YouTube ↗';
         tdActions.appendChild(aYt);
       }
+
       const btnEdit = document.createElement('button');
       btnEdit.className = 'btn btn-secondary';
-      btnEdit.style.padding = '4px 8px';
-      btnEdit.style.fontSize = '0.75rem';
+      btnEdit.style.padding = '4px 10px';
+      btnEdit.style.fontSize = '12px';
       btnEdit.style.marginRight = '4px';
-      btnEdit.textContent = '✏️ Edit';
+      btnEdit.textContent = 'Edit';
       btnEdit.addEventListener('click', () => loadPostIntoWizard(post));
       tdActions.appendChild(btnEdit);
 
       const btnDel = document.createElement('button');
-      btnDel.className = 'btn btn-secondary';
-      btnDel.style.padding = '4px 8px';
-      btnDel.style.fontSize = '0.75rem';
-      btnDel.textContent = '🗑️';
+      btnDel.className = 'btn btn-danger-ghost';
+      btnDel.style.fontSize = '12px';
+      btnDel.textContent = 'Delete';
       btnDel.addEventListener('click', () => deletePost(post.id));
       tdActions.appendChild(btnDel);
-      tr.appendChild(tdActions);
 
+      tr.appendChild(tdActions);
       el.postsTableBody.appendChild(tr);
     });
   } catch (err) {
@@ -913,9 +758,9 @@ async function fetchQueue() {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
     td.colSpan = 6;
-    td.style.color = 'var(--danger)';
+    td.style.color = 'var(--status-red)';
     td.style.textAlign = 'center';
-    td.textContent = `Failed to load posts: ${err.message}`;
+    td.textContent = `Failed to load queue: ${err.message}`;
     tr.appendChild(td);
     el.postsTableBody.appendChild(tr);
   }
@@ -925,45 +770,68 @@ async function deletePost(id) {
   if (!confirm(`Delete Post #${id}?`)) return;
   try {
     await fetch(`/api/posts/${id}`, { method: 'DELETE' });
-    showToast(`Post #${id} deleted successfully.`, 'success');
+    showToast(`Post #${id} deleted.`, 'success');
     fetchQueue();
   } catch (err) {
-    showToast(`Failed to delete: ${err.message}`, 'error');
+    showToast(`Delete failed: ${err.message}`, 'error');
   }
 }
 
-// --- STATUS & SETTINGS ---
-async function fetchStatus() {
-  try {
-    const res = await fetch(`/api/status?clientId=${state.activeClientId}`);
-    const data = await res.json();
-    if (el.dotYouTube) {
-      const yt = data.platforms.youtube;
-      if (yt.connected) {
-        el.dotYouTube.classList.add('active');
-      } else {
-        el.dotYouTube.classList.remove('active');
-      }
-    }
-    if (el.ytAuthStatus) {
-      const yt = data.platforms.youtube;
-      if (yt.connected) {
-        el.ytAuthStatus.textContent = '✅ Connected and Authorized with Google OAuth';
-        el.ytAuthStatus.style.color = 'var(--success)';
-      } else if (yt.configured) {
-        el.ytAuthStatus.textContent = '⚠️ Configured in .env, but needs Authorization click';
-        el.ytAuthStatus.style.color = 'var(--warning)';
-      } else {
-        el.ytAuthStatus.textContent = '❌ Credentials missing in .env';
-        el.ytAuthStatus.style.color = 'var(--danger)';
-      }
-    }
-  } catch (err) {
-    console.error('Error fetching status:', err);
+function loadPostIntoWizard(post) {
+  state.editingPostId = post.id;
+  state.activeClientId = post.client_id || 1;
+  state.selectedPlatforms = post.platforms || ['youtube'];
+
+  if (el.composerTitle) el.composerTitle.textContent = `Editing Post #${post.id}`;
+  if (el.editingIndicator) el.editingIndicator.textContent = `Status: ${post.status}`;
+
+  const headerSelect = document.getElementById('header-client-select');
+  const wizardSelect = document.getElementById('wizard-client-select');
+  if (headerSelect) headerSelect.value = String(state.activeClientId);
+  if (wizardSelect) wizardSelect.value = String(state.activeClientId);
+
+  el.masterText.value = post.master_text || '';
+  el.masterHashtags.value = post.master_hashtags || '';
+  el.ytTitle.value = post.youtube_title || '';
+  el.ytPrivacy.value = post.youtube_privacy || 'unlisted';
+  el.xOverride.value = post.x_post || '';
+  el.liOverride.value = post.linkedin_post || '';
+  el.igOverride.value = post.instagram_caption || '';
+  el.threadsOverride.value = post.threads_post || '';
+  if (el.fbOverride) el.fbOverride.value = post.facebook_post || '';
+
+  if (post.status === 'scheduled' && post.scheduled_at) {
+    const rSched = document.querySelector('input[name="timing"][value="scheduled"]');
+    if (rSched) rSched.checked = true;
+    el.scheduleInputs.style.display = 'flex';
+    const dt = new Date(post.scheduled_at);
+    el.scheduleDate.value = dt.toISOString().split('T')[0];
+    const hrs = String(dt.getHours()).padStart(2, '0');
+    const mins = String(dt.getMinutes()).padStart(2, '0');
+    el.scheduleTime.value = `${hrs}:${mins}`;
+    el.btnPublishFinal.textContent = 'Update Schedule';
+  } else {
+    const rNow = document.querySelector('input[name="timing"][value="now"]');
+    if (rNow) rNow.checked = true;
+    el.scheduleInputs.style.display = 'none';
+    el.btnPublishFinal.textContent = 'Update & Publish';
   }
+
+  el.platformCards.forEach((c) => {
+    const p = c.getAttribute('data-platform');
+    c.classList.toggle('selected', state.selectedPlatforms.includes(p));
+  });
+
+  updateLivePreviews();
+  switchEditorLens('master');
+
+  const tabWizard = document.querySelector('[data-target="tab-wizard"]');
+  if (tabWizard) tabWizard.click();
+
+  showToast(`Loaded Post #${post.id} into composer.`, 'info');
 }
 
-// --- AGENCY CLIENTS & ACCOUNTS MANAGER ---
+// --- WORKSPACES & CLIENT APIS ---
 function setupClientsManager() {
   const headerSelect = document.getElementById('header-client-select');
   const wizardSelect = document.getElementById('wizard-client-select');
@@ -974,7 +842,6 @@ function setupClientsManager() {
   const newClientName = document.getElementById('new-client-name');
   const newClientColor = document.getElementById('new-client-color');
 
-  // Channel Connection Modal Elements
   const channelModal = document.getElementById('add-channel-modal');
   const modalPlatformSelect = document.getElementById('modal-platform-select');
   const btnCloseModal = document.getElementById('btn-close-channel-modal');
@@ -985,17 +852,8 @@ function setupClientsManager() {
     headerSelect.addEventListener('change', () => {
       state.activeClientId = parseInt(headerSelect.value, 10);
       if (wizardSelect) wizardSelect.value = state.activeClientId;
-      showToast('Switched active client workspace.', 'info');
-      fetchStatus();
+      showToast('Switched client workspace.', 'info');
       fetchQueue();
-    });
-  }
-
-  if (wizardSelect) {
-    wizardSelect.addEventListener('change', () => {
-      state.activeClientId = parseInt(wizardSelect.value, 10);
-      if (headerSelect) headerSelect.value = state.activeClientId;
-      fetchStatus();
     });
   }
 
@@ -1018,7 +876,7 @@ function setupClientsManager() {
       const name = newClientName.value.trim();
       const color = newClientColor.value;
       if (!name) {
-        showToast('Please enter a client brand name.', 'warning');
+        showToast('Enter a client name.', 'warning');
         return;
       }
       try {
@@ -1029,13 +887,13 @@ function setupClientsManager() {
         });
         const data = await res.json();
         if (data.success) {
-          showToast(`Client "${name}" added to agency workspace!`, 'success');
+          showToast(`Workspace "${name}" created.`, 'success');
           addClientForm.style.display = 'none';
           newClientName.value = '';
           await fetchClients();
           fetchQueue();
         } else {
-          showToast(`Error creating client: ${data.error}`, 'error');
+          showToast(`Error: ${data.error}`, 'error');
         }
       } catch (err) {
         showToast(`Network error: ${err.message}`, 'error');
@@ -1043,7 +901,6 @@ function setupClientsManager() {
     });
   }
 
-  // Modal Platform Switcher
   if (modalPlatformSelect) {
     modalPlatformSelect.addEventListener('change', () => {
       const p = modalPlatformSelect.value;
@@ -1108,12 +965,11 @@ function setupClientsManager() {
         });
         const data = await res.json();
         if (data.success) {
-          showToast(`Connected ${platform} API credentials for this client! (AES-256 Encrypted)`, 'success');
+          showToast(`Saved encrypted ${platform} credentials.`, 'success');
           hideChannelModal();
           await fetchClients();
-          fetchStatus();
         } else {
-          showToast(`Error saving credentials: ${data.error}`, 'error');
+          showToast(`Error: ${data.error}`, 'error');
         }
       } catch (err) {
         showToast(`Network error: ${err.message}`, 'error');
@@ -1133,75 +989,58 @@ async function fetchClients() {
     const wizardSelect = document.getElementById('wizard-client-select');
     const container = document.getElementById('clients-list-container');
 
-    // Populate dropdowns using safe DOM methods
     if (headerSelect && wizardSelect) {
       clearElement(headerSelect);
-      clearElement(wizardSelect);
       state.clients.forEach((c) => {
-        const opt1 = document.createElement('option');
-        opt1.value = String(c.id);
-        opt1.textContent = c.name;
-        headerSelect.appendChild(opt1);
-
-        const opt2 = document.createElement('option');
-        opt2.value = String(c.id);
-        opt2.textContent = c.name;
-        wizardSelect.appendChild(opt2);
+        const opt = document.createElement('option');
+        opt.value = String(c.id);
+        opt.textContent = c.name;
+        headerSelect.appendChild(opt);
       });
       headerSelect.value = String(state.activeClientId);
       wizardSelect.value = String(state.activeClientId);
     }
 
-    // Populate Clients & Accounts cards
     if (container) {
       clearElement(container);
       for (const client of state.clients) {
-        // Fetch accounts for this specific client
         const accRes = await fetch(`/api/clients/${client.id}/accounts`);
         const accData = await accRes.json();
         const accounts = accData.accounts || [];
 
         const card = document.createElement('div');
-        card.style.background = 'var(--bg-primary)';
-        card.style.border = `1px solid var(--border)`;
-        card.style.borderLeft = `6px solid ${client.color_code || '#3B82F6'}`;
-        card.style.borderRadius = '8px';
-        card.style.padding = '18px 20px';
-        card.style.display = 'flex';
-        card.style.flexDirection = 'column';
-        card.style.gap = '14px';
+        card.className = 'client-row-card';
+        card.style.borderLeft = `3px solid ${client.color_code || '#fafafa'}`;
 
-        // Header Row
         const headerRow = document.createElement('div');
         headerRow.style.display = 'flex';
         headerRow.style.justifyContent = 'space-between';
         headerRow.style.alignItems = 'center';
 
         const infoDiv = document.createElement('div');
-        const h3 = document.createElement('h3');
-        h3.style.display = 'flex';
-        h3.style.alignItems = 'center';
-        h3.style.gap = '8px';
+        const h3 = document.createElement('div');
+        h3.style.fontWeight = '600';
+        h3.style.fontSize = '14px';
         h3.textContent = client.name;
 
-        const sub = document.createElement('p');
-        sub.style.fontSize = '0.8rem';
-        sub.style.color = 'var(--text-secondary)';
-        sub.style.marginTop = '2px';
-        sub.textContent = `Client ID #${client.id} • Registered ${new Date(client.created_at).toLocaleDateString()}`;
+        const sub = document.createElement('div');
+        sub.style.fontSize = '12px';
+        sub.style.color = 'var(--text-muted)';
+        sub.style.fontFamily = 'var(--font-mono)';
+        sub.textContent = `ID #${client.id} · Created ${new Date(client.created_at).toLocaleDateString()}`;
 
         infoDiv.appendChild(h3);
         infoDiv.appendChild(sub);
 
         const actionsDiv = document.createElement('div');
         actionsDiv.style.display = 'flex';
-        actionsDiv.style.gap = '8px';
+        actionsDiv.style.gap = '6px';
 
         const btnAddChan = document.createElement('button');
-        btnAddChan.className = 'btn btn-primary';
-        btnAddChan.style.padding = '6px 14px';
-        btnAddChan.style.fontSize = '0.8rem';
-        btnAddChan.textContent = '+ Connect Channel / API';
+        btnAddChan.className = 'btn btn-secondary';
+        btnAddChan.style.padding = '5px 12px';
+        btnAddChan.style.fontSize = '12px';
+        btnAddChan.textContent = '+ Connect Channel';
         btnAddChan.addEventListener('click', () => {
           openChannelModal(client.id, client.name);
         });
@@ -1209,14 +1048,13 @@ async function fetchClients() {
 
         if (client.id !== 1) {
           const btnDel = document.createElement('button');
-          btnDel.className = 'btn btn-secondary';
-          btnDel.style.padding = '6px 10px';
-          btnDel.style.fontSize = '0.8rem';
-          btnDel.textContent = '🗑️ Delete';
+          btnDel.className = 'btn btn-danger-ghost';
+          btnDel.style.fontSize = '12px';
+          btnDel.textContent = 'Delete';
           btnDel.addEventListener('click', async () => {
-            if (!confirm(`Delete client "${client.name}" and all associated posts?`)) return;
+            if (!confirm(`Delete workspace "${client.name}"?`)) return;
             await fetch(`/api/clients/${client.id}`, { method: 'DELETE' });
-            showToast('Client deleted.', 'info');
+            showToast('Workspace deleted.', 'info');
             await fetchClients();
             fetchQueue();
           });
@@ -1227,63 +1065,49 @@ async function fetchClients() {
         headerRow.appendChild(actionsDiv);
         card.appendChild(headerRow);
 
-        // Connected Accounts Badges Row
         const accountsRow = document.createElement('div');
         accountsRow.style.display = 'flex';
         accountsRow.style.flexWrap = 'wrap';
-        accountsRow.style.gap = '8px';
+        accountsRow.style.gap = '6px';
         accountsRow.style.alignItems = 'center';
         accountsRow.style.paddingTop = '10px';
-        accountsRow.style.borderTop = '1px solid var(--border)';
-
-        const labelSpan = document.createElement('span');
-        labelSpan.style.fontSize = '0.75rem';
-        labelSpan.style.color = 'var(--text-muted)';
-        labelSpan.style.fontWeight = '600';
-        labelSpan.textContent = 'CONNECTED APIS:';
-        accountsRow.appendChild(labelSpan);
+        accountsRow.style.borderTop = '1px solid var(--border-subtle)';
 
         if (accounts.length === 0) {
           const noAcc = document.createElement('span');
-          noAcc.style.fontSize = '0.8rem';
+          noAcc.style.fontSize = '12px';
           noAcc.style.color = 'var(--text-muted)';
-          noAcc.textContent = 'No channels connected yet. Click "+ Connect Channel / API" to link YouTube, X, LinkedIn, or Meta.';
+          noAcc.textContent = 'No channels linked. Click "+ Connect Channel" to add API credentials.';
           accountsRow.appendChild(noAcc);
         } else {
           accounts.forEach((acc) => {
             const badge = document.createElement('div');
-            badge.style.display = 'flex';
-            badge.style.alignItems = 'center';
-            badge.style.gap = '6px';
-            badge.style.background = 'var(--bg-surface)';
-            badge.style.border = '1px solid var(--border)';
-            badge.style.borderRadius = '16px';
-            badge.style.padding = '4px 10px';
-            badge.style.fontSize = '0.8rem';
+            badge.className = 'account-pill';
 
-            const iconMap = { youtube: '🔴', x: '🐦', linkedin: '💼', instagram: '📸', threads: '🧵', facebook: '📘' };
-            const icon = iconMap[acc.platform.toLowerCase()] || '📡';
+            const pSpan = document.createElement('span');
+            pSpan.className = 'account-pill-platform';
+            pSpan.textContent = acc.platform;
+            badge.appendChild(pSpan);
 
             const textSpan = document.createElement('span');
-            textSpan.textContent = `${icon} ${acc.account_name} (${acc.platform.toUpperCase()})`;
+            textSpan.textContent = acc.account_name;
             badge.appendChild(textSpan);
 
             const btnUnlink = document.createElement('button');
-            btnUnlink.textContent = '✕';
+            btnUnlink.textContent = '×';
             btnUnlink.style.background = 'transparent';
             btnUnlink.style.border = 'none';
-            btnUnlink.style.color = 'var(--danger)';
+            btnUnlink.style.color = 'var(--text-muted)';
             btnUnlink.style.cursor = 'pointer';
-            btnUnlink.style.fontSize = '0.85rem';
-            btnUnlink.style.padding = '0 2px';
+            btnUnlink.style.fontSize = '14px';
+            btnUnlink.style.marginLeft = '4px';
             btnUnlink.title = 'Unlink Account';
             btnUnlink.addEventListener('click', async (e) => {
               e.stopPropagation();
               if (!confirm(`Unlink ${acc.platform} for ${client.name}?`)) return;
               await fetch(`/api/accounts/${acc.id}`, { method: 'DELETE' });
-              showToast(`Unlinked ${acc.platform} account.`, 'info');
+              showToast(`Unlinked ${acc.platform}.`, 'info');
               await fetchClients();
-              fetchStatus();
             });
             badge.appendChild(btnUnlink);
 
@@ -1308,12 +1132,11 @@ function openChannelModal(clientId, clientName) {
 
   if (!modal) return;
   inputId.value = String(clientId);
-  title.textContent = `Connect Channel to "${clientName}"`;
+  title.textContent = `Connect Channel — ${clientName}`;
   if (oauthBtn) {
     oauthBtn.href = `/auth/youtube?clientId=${clientId}`;
   }
 
-  // Reset inputs
   document.getElementById('modal-account-name').value = '';
   document.getElementById('modal-platform-select').value = 'youtube';
   document.querySelectorAll('.cred-fields-block').forEach((b) => {
@@ -1349,77 +1172,13 @@ function showToast(message, type = 'info') {
       if (toast.parentElement) {
         toast.parentElement.removeChild(toast);
       }
-    }, 300);
-  }, 4000);
+    }, 250);
+  }, 3500);
 }
 
-// Helper utility to safely clear child nodes
 function clearElement(element) {
+  if (!element) return;
   while (element.firstChild) {
     element.removeChild(element.firstChild);
   }
-}
-
-// Helper utility to append strong label + text
-function appendBoldLabel(container, labelText, valueText) {
-  const strong = document.createElement('strong');
-  strong.textContent = labelText;
-  container.appendChild(strong);
-  const span = document.createElement('span');
-  span.textContent = valueText;
-  container.appendChild(span);
-}
-
-// --- LOAD POST INTO WIZARD FOR EDITING ---
-function loadPostIntoWizard(post) {
-  state.editingPostId = post.id;
-  state.activeClientId = post.client_id || 1;
-  state.selectedPlatforms = post.platforms || ['youtube'];
-
-  const headerSelect = document.getElementById('header-client-select');
-  const wizardSelect = document.getElementById('wizard-client-select');
-  if (headerSelect) headerSelect.value = String(state.activeClientId);
-  if (wizardSelect) wizardSelect.value = String(state.activeClientId);
-
-  el.masterText.value = post.master_text || '';
-  el.masterHashtags.value = post.master_hashtags || '';
-  el.ytTitle.value = post.youtube_title || '';
-  el.ytPrivacy.value = post.youtube_privacy || 'unlisted';
-  el.xOverride.value = post.x_post || '';
-  el.liOverride.value = post.linkedin_post || '';
-  el.igOverride.value = post.instagram_caption || '';
-  el.threadsOverride.value = post.threads_post || '';
-  if (el.fbOverride) el.fbOverride.value = post.facebook_post || '';
-
-  if (post.status === 'scheduled' && post.scheduled_at) {
-    const rSched = document.querySelector('input[name="timing"][value="scheduled"]');
-    if (rSched) rSched.checked = true;
-    el.scheduleInputs.style.display = 'flex';
-    const dt = new Date(post.scheduled_at);
-    el.scheduleDate.value = dt.toISOString().split('T')[0];
-    const hrs = String(dt.getHours()).padStart(2, '0');
-    const mins = String(dt.getMinutes()).padStart(2, '0');
-    el.scheduleTime.value = `${hrs}:${mins}`;
-  } else {
-    const rNow = document.querySelector('input[name="timing"][value="now"]');
-    if (rNow) rNow.checked = true;
-    el.scheduleInputs.style.display = 'none';
-  }
-
-  el.platformCards.forEach((c) => {
-    const p = c.getAttribute('data-platform');
-    c.classList.toggle('selected', state.selectedPlatforms.includes(p));
-  });
-
-  updateLivePreviews();
-  updateReviewSummary();
-
-  const tabWizard = document.querySelector('[data-target="tab-wizard"]');
-  if (tabWizard) tabWizard.click();
-  el.step2.style.display = 'none';
-  el.step3.style.display = 'none';
-  el.step1.style.display = 'block';
-  state.currentStep = 1;
-
-  showToast(`Loaded Post #${post.id} into editor for editing.`, 'info');
 }

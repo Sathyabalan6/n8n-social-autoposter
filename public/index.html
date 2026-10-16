@@ -3,365 +3,357 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SocialPulse Studio - Multi-Platform Auto-Poster</title>
+  <title>SocialPulse — Multi-Channel Publishing Workbench</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <!-- Clean Minimalist Header -->
+  <!-- Precision Top Header -->
   <header>
-    <div class="logo">
-      <span>🚀 SocialPulse</span>
+    <div class="brand-cluster">
+      <div class="logo">
+        <div class="logo-mark">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <span>SocialPulse</span>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-target="tab-wizard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span>Composer</span>
+        </button>
+        <button class="nav-tab" data-target="tab-queue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span>Queue</span>
+        </button>
+        <button class="nav-tab" data-target="tab-clients">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Workspaces & APIs</span>
+        </button>
+      </nav>
     </div>
 
-    <!-- Main Navigation Pills -->
-    <nav class="nav-tabs">
-      <button class="nav-tab active" data-target="tab-wizard">✍️ Compose</button>
-      <button class="nav-tab" data-target="tab-queue">📋 Queue</button>
-      <button class="nav-tab" data-target="tab-clients">🏢 Clients & Accounts</button>
-    </nav>
-
-    <!-- Header Client Selector -->
+    <!-- Active Client Switcher -->
     <div class="header-right">
-      <div class="client-pill">
-        <span class="client-pill-label">Client:</span>
-        <select id="header-client-select">
-          <!-- Dynamically populated -->
-        </select>
+      <div class="workspace-selector">
+        <span class="workspace-dot"></span>
+        <span class="workspace-label">Client</span>
+        <select id="header-client-select" aria-label="Select Client Workspace"></select>
       </div>
     </div>
   </header>
 
   <main>
-    <!-- TAB 1: COMPOSE WIZARD -->
+    <!-- VIEW 1: UNIFIED STUDIO COMPOSER -->
     <div id="tab-wizard" class="tab-content active">
-      <div class="two-col-layout">
+      <div class="workbench-grid">
         
-        <!-- Left Column: The 3-Step Wizard Form -->
-        <div class="wizard-column">
+        <!-- Left Pane: Single-Screen Multi-Channel Composer -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title" id="composer-mode-title">New Post</span>
+            <span class="panel-subtitle" id="editing-indicator"></span>
+          </div>
 
-          <!-- STEP 1: CONTENT & CHANNELS -->
-          <div class="card wizard-step" id="step-1">
-            <div class="card-header">
-              <div class="step-indicator">STEP 1 OF 3</div>
-              <h2 class="card-title">Compose Post</h2>
-            </div>
-
-            <!-- Target Client Indicator -->
+          <div class="panel-body">
             <input type="hidden" id="wizard-client-select">
 
-            <div class="form-group">
-              <label class="form-label" for="master_text">Post Text</label>
-              <textarea id="master_text" placeholder="Write your post or description here..."></textarea>
-              <div class="char-count" id="master-char-count">0 characters</div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="master_hashtags">Hashtags <span class="optional">(optional)</span></label>
-              <input type="text" id="master_hashtags" placeholder="#buildinpublic #tech #automation">
-            </div>
-
-            <!-- Master Media Upload -->
-            <div class="form-group">
-              <label class="form-label">Attach Media <span class="optional">(Video or Image)</span></label>
-              <div class="dropzone" id="dropzone-master">
-                <div class="dropzone-icon">📁</div>
-                <div class="dropzone-text">Click or drag media here</div>
-                <input type="file" id="media-master-input" style="display: none;" accept="video/*,image/*">
+            <!-- 1. Target Channels Toggle Matrix -->
+            <span class="section-label">Target Channels</span>
+            <div class="channel-Matrix">
+              <div class="platform-card selected" data-platform="youtube">
+                <span class="platform-check"></span>
+                <svg viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                <span>YouTube</span>
               </div>
-              <div class="media-preview-container" id="media-preview-master" style="display: none;">
-                <button class="btn-remove-media" id="btn-remove-master-media">✕ Remove</button>
+              <div class="platform-card selected" data-platform="x">
+                <span class="platform-check"></span>
+                <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                <span>X</span>
               </div>
-            </div>
-
-            <!-- Publishing Timing -->
-            <div class="form-group">
-              <label class="form-label">Schedule</label>
-              <div class="timing-toggle-row">
-                <label><input type="radio" name="timing" value="now" checked> Now</label>
-                <label><input type="radio" name="timing" value="scheduled"> Schedule Date & Time</label>
+              <div class="platform-card selected" data-platform="linkedin">
+                <span class="platform-check"></span>
+                <svg viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                <span>LinkedIn</span>
               </div>
-              <div id="schedule-inputs" class="schedule-inputs" style="display: none;">
-                <input type="date" id="schedule_date">
-                <input type="time" id="schedule_time" value="14:30">
+              <div class="platform-card" data-platform="instagram">
+                <span class="platform-check"></span>
+                <svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                <span>Instagram</span>
+              </div>
+              <div class="platform-card" data-platform="threads">
+                <span class="platform-check"></span>
+                <svg viewBox="0 0 24 24"><path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.589 12c.027 3.086.718 5.496 2.057 7.164 1.43 1.783 3.631 2.698 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.964-.065-1.19.408-2.285 1.33-3.082.88-.76 2.119-1.207 3.583-1.291a13.853 13.853 0 0 1 3.02.142c-.126-.742-.375-1.332-.75-1.757-.513-.586-1.308-.883-2.359-.89h-.029c-.844 0-1.992.232-2.721 1.32L7.734 7.847c.98-1.454 2.568-2.256 4.478-2.256h.044c3.194.02 5.097 1.975 5.287 5.388.108.046.216.094.321.142 1.49.7 2.58 1.761 3.154 3.07.797 1.82.871 4.79-1.548 7.158-1.85 1.81-4.094 2.628-7.277 2.65zm1.003-11.69c-.242 0-.487.007-.739.021-1.836.103-2.98.946-2.916 2.143.067 1.256 1.452 1.839 2.784 1.767 1.224-.065 2.818-.543 3.086-3.71a10.5 10.5 0 0 0-2.215-.221z"/></svg>
+                <span>Threads</span>
+              </div>
+              <div class="platform-card" data-platform="facebook">
+                <span class="platform-check"></span>
+                <svg viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                <span>Facebook</span>
               </div>
             </div>
 
-            <!-- Target Channels Selection -->
-            <div class="form-group">
-              <label class="form-label">Publish To</label>
-              <div class="platform-grid">
-                <div class="platform-card selected" data-platform="youtube">
-                  <span class="platform-icon">🔴</span>
-                  <span>YouTube</span>
+            <!-- 2. Unified Editor Surface with Channel Lens Bar -->
+            <div class="editor-surface">
+              <div class="editor-lens-bar" id="studio-nav-bar">
+                <button class="lens-tab active" data-lens="master">Master Post</button>
+                <button class="lens-tab" data-lens="youtube">YouTube</button>
+                <button class="lens-tab" data-lens="x">X</button>
+                <button class="lens-tab" data-lens="linkedin">LinkedIn</button>
+                <button class="lens-tab" data-lens="instagram">Instagram</button>
+                <button class="lens-tab" data-lens="threads">Threads</button>
+                <button class="lens-tab" data-lens="facebook">Facebook</button>
+              </div>
+
+              <!-- LENS: MASTER -->
+              <div class="lens-pane" id="panel-master">
+                <div class="field-row">
+                  <div class="field-header">
+                    <label class="form-label" for="master_text">Master Copy</label>
+                    <span class="char-count" id="master-char-count">0 chars</span>
+                  </div>
+                  <textarea id="master_text" class="seamless-editor" placeholder="Write your core content here. Automatically adapts across selected channels..."></textarea>
                 </div>
-                <div class="platform-card selected" data-platform="x">
-                  <span class="platform-icon">🐦</span>
-                  <span>X</span>
+
+                <div class="hashtag-bar">
+                  <span>#</span>
+                  <input type="text" id="master_hashtags" placeholder="Tags (e.g. buildinpublic tech automation)">
                 </div>
-                <div class="platform-card selected" data-platform="linkedin">
-                  <span class="platform-icon">💼</span>
-                  <span>LinkedIn</span>
+
+                <div style="margin-top: 14px;">
+                  <div class="dropzone" id="dropzone-master">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span class="dropzone-text">Attach master video or image</span>
+                    <input type="file" id="media-master-input" style="display: none;" accept="video/*,image/*">
+                  </div>
+                  <div class="media-preview-container" id="media-preview-master" style="display: none;">
+                    <button class="btn-remove-media" id="btn-remove-master-media">Remove</button>
+                  </div>
                 </div>
-                <div class="platform-card" data-platform="instagram">
-                  <span class="platform-icon">📸</span>
-                  <span>Instagram</span>
+              </div>
+
+              <!-- LENS: YOUTUBE -->
+              <div class="lens-pane platform-panel" id="panel-youtube" style="display: none;">
+                <div class="field-row">
+                  <div class="field-header">
+                    <label class="form-label" for="youtube_title">Video / Short Title</label>
+                    <span class="char-count" id="yt-char-count">0/100</span>
+                  </div>
+                  <input type="text" id="youtube_title" placeholder="Inherits first 70 chars of Master Copy if left blank">
                 </div>
-                <div class="platform-card" data-platform="threads">
-                  <span class="platform-icon">🧵</span>
-                  <span>Threads</span>
+
+                <div class="field-row">
+                  <label class="form-label" for="youtube_privacy">Visibility</label>
+                  <select id="youtube_privacy" style="margin-top: 6px;">
+                    <option value="unlisted" selected>Unlisted</option>
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                  </select>
                 </div>
-                <div class="platform-card" data-platform="facebook">
-                  <span class="platform-icon">📘</span>
-                  <span>Facebook</span>
+
+                <div class="field-row">
+                  <span class="section-label">Media Override</span>
+                  <div class="media-toggle-group">
+                    <label><input type="radio" name="media_source_youtube" value="master" checked> Master</label>
+                    <label><input type="radio" name="media_source_youtube" value="custom"> Custom Video</label>
+                    <label><input type="radio" name="media_source_youtube" value="none"> None</label>
+                  </div>
+                  <div id="custom-media-box-youtube" style="display: none;">
+                    <div class="dropzone" id="dropzone-youtube">
+                      <span class="dropzone-text">Select custom video for YouTube (.mp4, .mov)</span>
+                      <input type="file" id="media-youtube-input" style="display: none;" accept="video/*">
+                    </div>
+                    <div class="media-preview-container" id="media-preview-youtube" style="display: none;">
+                      <button class="btn-remove-media" id="btn-remove-youtube-media">Remove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LENS: X -->
+              <div class="lens-pane platform-panel" id="panel-x" style="display: none;">
+                <div class="field-row">
+                  <div class="field-header">
+                    <label class="form-label" for="x_override">X Post Override</label>
+                    <span class="char-count" id="x-char-count">0/280</span>
+                  </div>
+                  <textarea id="x_override" placeholder="Leave blank to auto-compile from Master Copy (capped at 280 chars)..."></textarea>
+                </div>
+
+                <div class="field-row">
+                  <span class="section-label">Media Override</span>
+                  <div class="media-toggle-group">
+                    <label><input type="radio" name="media_source_x" value="master" checked> Master</label>
+                    <label><input type="radio" name="media_source_x" value="custom"> Custom</label>
+                    <label><input type="radio" name="media_source_x" value="none"> None</label>
+                  </div>
+                  <div id="custom-media-box-x" style="display: none;">
+                    <div class="dropzone" id="dropzone-x">
+                      <span class="dropzone-text">Select custom image/video for X</span>
+                      <input type="file" id="media-x-input" style="display: none;" accept="video/*,image/*">
+                    </div>
+                    <div class="media-preview-container" id="media-preview-x" style="display: none;">
+                      <button class="btn-remove-media" id="btn-remove-x-media">Remove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LENS: LINKEDIN -->
+              <div class="lens-pane platform-panel" id="panel-linkedin" style="display: none;">
+                <div class="field-row">
+                  <div class="field-header">
+                    <label class="form-label" for="linkedin_override">LinkedIn Post Override</label>
+                    <span class="char-count" id="li-char-count">0/3000</span>
+                  </div>
+                  <textarea id="linkedin_override" placeholder="Leave blank to inherit Master Copy..."></textarea>
+                </div>
+
+                <div class="field-row">
+                  <span class="section-label">Media Override</span>
+                  <div class="media-toggle-group">
+                    <label><input type="radio" name="media_source_linkedin" value="master" checked> Master</label>
+                    <label><input type="radio" name="media_source_linkedin" value="custom"> Custom</label>
+                    <label><input type="radio" name="media_source_linkedin" value="none"> None</label>
+                  </div>
+                  <div id="custom-media-box-linkedin" style="display: none;">
+                    <div class="dropzone" id="dropzone-linkedin">
+                      <span class="dropzone-text">Select custom image, video, or PDF</span>
+                      <input type="file" id="media-linkedin-input" style="display: none;" accept="video/*,image/*,application/pdf">
+                    </div>
+                    <div class="media-preview-container" id="media-preview-linkedin" style="display: none;">
+                      <button class="btn-remove-media" id="btn-remove-linkedin-media">Remove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LENS: INSTAGRAM -->
+              <div class="lens-pane platform-panel" id="panel-instagram" style="display: none;">
+                <div class="field-row">
+                  <label class="form-label" for="instagram_override">Instagram Caption Override</label>
+                  <textarea id="instagram_override" style="margin-top: 6px;" placeholder="Leave blank to inherit Master Copy..."></textarea>
+                </div>
+
+                <div class="field-row">
+                  <span class="section-label">Media Override</span>
+                  <div class="media-toggle-group">
+                    <label><input type="radio" name="media_source_instagram" value="master" checked> Master</label>
+                    <label><input type="radio" name="media_source_instagram" value="custom"> Custom</label>
+                    <label><input type="radio" name="media_source_instagram" value="none"> None</label>
+                  </div>
+                  <div id="custom-media-box-instagram" style="display: none;">
+                    <div class="dropzone" id="dropzone-instagram">
+                      <span class="dropzone-text">Select 4:5 photo or 9:16 Reel</span>
+                      <input type="file" id="media-instagram-input" style="display: none;" accept="video/*,image/*">
+                    </div>
+                    <div class="media-preview-container" id="media-preview-instagram" style="display: none;">
+                      <button class="btn-remove-media" id="btn-remove-instagram-media">Remove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LENS: THREADS -->
+              <div class="lens-pane platform-panel" id="panel-threads" style="display: none;">
+                <div class="field-row">
+                  <div class="field-header">
+                    <label class="form-label" for="threads_override">Threads Override</label>
+                    <span class="char-count" id="threads-char-count">0/500</span>
+                  </div>
+                  <textarea id="threads_override" placeholder="Leave blank to inherit Master Copy (1 topic tag auto-extracted)..."></textarea>
+                </div>
+
+                <div class="field-row">
+                  <span class="section-label">Media Override</span>
+                  <div class="media-toggle-group">
+                    <label><input type="radio" name="media_source_threads" value="master" checked> Master</label>
+                    <label><input type="radio" name="media_source_threads" value="custom"> Custom</label>
+                    <label><input type="radio" name="media_source_threads" value="none"> None</label>
+                  </div>
+                  <div id="custom-media-box-threads" style="display: none;">
+                    <div class="dropzone" id="dropzone-threads">
+                      <span class="dropzone-text">Select custom media for Threads</span>
+                      <input type="file" id="media-threads-input" style="display: none;" accept="video/*,image/*">
+                    </div>
+                    <div class="media-preview-container" id="media-preview-threads" style="display: none;">
+                      <button class="btn-remove-media" id="btn-remove-threads-media">Remove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LENS: FACEBOOK -->
+              <div class="lens-pane platform-panel" id="panel-facebook" style="display: none;">
+                <div class="field-row">
+                  <label class="form-label" for="facebook_override">Facebook Page Post Override</label>
+                  <textarea id="facebook_override" style="margin-top: 6px;" placeholder="Leave blank to inherit Master Copy..."></textarea>
+                </div>
+
+                <div class="field-row">
+                  <span class="section-label">Media Override</span>
+                  <div class="media-toggle-group">
+                    <label><input type="radio" name="media_source_facebook" value="master" checked> Master</label>
+                    <label><input type="radio" name="media_source_facebook" value="custom"> Custom</label>
+                    <label><input type="radio" name="media_source_facebook" value="none"> None</label>
+                  </div>
+                  <div id="custom-media-box-facebook" style="display: none;">
+                    <div class="dropzone" id="dropzone-facebook">
+                      <span class="dropzone-text">Select custom media for Facebook</span>
+                      <input type="file" id="media-facebook-input" style="display: none;" accept="video/*,image/*">
+                    </div>
+                    <div class="media-preview-container" id="media-preview-facebook" style="display: none;">
+                      <button class="btn-remove-media" id="btn-remove-facebook-media">Remove</button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div class="btn-group">
-              <div></div>
-              <button class="btn btn-primary" id="btn-goto-step-2">Continue to Customize ➔</button>
+            <!-- 3. Single-Screen Footer Action Bar -->
+            <div class="composer-footer">
+              <div class="schedule-cluster">
+                <div class="timing-segmented">
+                  <label><input type="radio" name="timing" value="now" checked> Publish Now</label>
+                  <label><input type="radio" name="timing" value="scheduled"> Schedule</label>
+                </div>
+                <div id="schedule-inputs" class="schedule-inputs" style="display: none;">
+                  <input type="date" id="schedule_date">
+                  <input type="time" id="schedule_time" value="14:30">
+                </div>
+              </div>
+
+              <div class="action-cluster">
+                <button class="btn btn-secondary" id="btn-save-draft">Save Draft</button>
+                <button class="btn btn-primary" id="btn-publish-final">Publish Post</button>
+              </div>
             </div>
+
           </div>
-
-          <!-- STEP 2: CHANNEL STUDIOS -->
-          <div class="card wizard-step" id="step-2" style="display: none;">
-            <div class="card-header">
-              <div class="step-indicator">STEP 2 OF 3</div>
-              <h2 class="card-title">Customize Per Channel</h2>
-            </div>
-
-            <!-- Dynamic Studio Navigation Bar -->
-            <div class="studio-nav-bar" id="studio-nav-bar"></div>
-
-            <!-- YOUTUBE PANEL -->
-            <div class="platform-panel" id="panel-youtube" style="display: none;">
-              <div class="form-group">
-                <label class="form-label" for="youtube_title">Video Title</label>
-                <input type="text" id="youtube_title" placeholder="YouTube Video or Short Title">
-                <div class="char-count" id="yt-char-count">0/100</div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="youtube_privacy">Privacy</label>
-                <select id="youtube_privacy">
-                  <option value="unlisted" selected>Unlisted</option>
-                  <option value="public">Public</option>
-                  <option value="private">Private</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Media Source</label>
-                <div class="media-toggle-group">
-                  <label><input type="radio" name="media_source_youtube" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_youtube" value="custom"> Upload Custom</label>
-                  <label><input type="radio" name="media_source_youtube" value="none"> No Media</label>
-                </div>
-                <div id="custom-media-box-youtube" style="display: none;">
-                  <div class="dropzone" id="dropzone-youtube">
-                    <div class="dropzone-text">Upload custom YouTube video (.mp4, .mov)</div>
-                    <input type="file" id="media-youtube-input" style="display: none;" accept="video/*">
-                  </div>
-                  <div class="media-preview-container" id="media-preview-youtube" style="display: none;">
-                    <button class="btn-remove-media" id="btn-remove-youtube-media">✕ Remove</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- X PANEL -->
-            <div class="platform-panel" id="panel-x" style="display: none;">
-              <div class="form-group">
-                <label class="form-label" for="x_override">Tweet Text</label>
-                <textarea id="x_override" placeholder="Custom copy for X..."></textarea>
-                <div class="char-count" id="x-char-count">0/280</div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Media Source</label>
-                <div class="media-toggle-group">
-                  <label><input type="radio" name="media_source_x" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_x" value="custom"> Upload Custom</label>
-                  <label><input type="radio" name="media_source_x" value="none"> No Media</label>
-                </div>
-                <div id="custom-media-box-x" style="display: none;">
-                  <div class="dropzone" id="dropzone-x">
-                    <div class="dropzone-text">Upload custom image/video for X</div>
-                    <input type="file" id="media-x-input" style="display: none;" accept="video/*,image/*">
-                  </div>
-                  <div class="media-preview-container" id="media-preview-x" style="display: none;">
-                    <button class="btn-remove-media" id="btn-remove-x-media">✕ Remove</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- LINKEDIN PANEL -->
-            <div class="platform-panel" id="panel-linkedin" style="display: none;">
-              <div class="form-group">
-                <label class="form-label" for="linkedin_override">LinkedIn Post</label>
-                <textarea id="linkedin_override" placeholder="Professional post narrative..."></textarea>
-                <div class="char-count" id="li-char-count">0/3000</div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Media Source</label>
-                <div class="media-toggle-group">
-                  <label><input type="radio" name="media_source_linkedin" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_linkedin" value="custom"> Upload Custom</label>
-                  <label><input type="radio" name="media_source_linkedin" value="none"> No Media</label>
-                </div>
-                <div id="custom-media-box-linkedin" style="display: none;">
-                  <div class="dropzone" id="dropzone-linkedin">
-                    <div class="dropzone-text">Upload custom image, video, or PDF</div>
-                    <input type="file" id="media-linkedin-input" style="display: none;" accept="video/*,image/*,application/pdf">
-                  </div>
-                  <div class="media-preview-container" id="media-preview-linkedin" style="display: none;">
-                    <button class="btn-remove-media" id="btn-remove-linkedin-media">✕ Remove</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- INSTAGRAM PANEL -->
-            <div class="platform-panel" id="panel-instagram" style="display: none;">
-              <div class="form-group">
-                <label class="form-label" for="instagram_override">Caption</label>
-                <textarea id="instagram_override" placeholder="Instagram caption..."></textarea>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Media Source</label>
-                <div class="media-toggle-group">
-                  <label><input type="radio" name="media_source_instagram" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_instagram" value="custom"> Upload Custom</label>
-                  <label><input type="radio" name="media_source_instagram" value="none"> No Media</label>
-                </div>
-                <div id="custom-media-box-instagram" style="display: none;">
-                  <div class="dropzone" id="dropzone-instagram">
-                    <div class="dropzone-text">Upload 4:5 image or 9:16 Reel</div>
-                    <input type="file" id="media-instagram-input" style="display: none;" accept="video/*,image/*">
-                  </div>
-                  <div class="media-preview-container" id="media-preview-instagram" style="display: none;">
-                    <button class="btn-remove-media" id="btn-remove-instagram-media">✕ Remove</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- THREADS PANEL -->
-            <div class="platform-panel" id="panel-threads" style="display: none;">
-              <div class="form-group">
-                <label class="form-label" for="threads_override">Post Text</label>
-                <textarea id="threads_override" placeholder="Threads post text..."></textarea>
-                <div class="char-count" id="threads-char-count">0/500</div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Media Source</label>
-                <div class="media-toggle-group">
-                  <label><input type="radio" name="media_source_threads" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_threads" value="custom"> Upload Custom</label>
-                  <label><input type="radio" name="media_source_threads" value="none"> No Media</label>
-                </div>
-                <div id="custom-media-box-threads" style="display: none;">
-                  <div class="dropzone" id="dropzone-threads">
-                    <div class="dropzone-text">Upload custom photo/video for Threads</div>
-                    <input type="file" id="media-threads-input" style="display: none;" accept="video/*,image/*">
-                  </div>
-                  <div class="media-preview-container" id="media-preview-threads" style="display: none;">
-                    <button class="btn-remove-media" id="btn-remove-threads-media">✕ Remove</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- FACEBOOK PANEL -->
-            <div class="platform-panel" id="panel-facebook" style="display: none;">
-              <div class="form-group">
-                <label class="form-label" for="facebook_override">Page Post</label>
-                <textarea id="facebook_override" placeholder="Facebook post copy..."></textarea>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Media Source</label>
-                <div class="media-toggle-group">
-                  <label><input type="radio" name="media_source_facebook" value="master" checked> Use Master Media</label>
-                  <label><input type="radio" name="media_source_facebook" value="custom"> Upload Custom</label>
-                  <label><input type="radio" name="media_source_facebook" value="none"> No Media</label>
-                </div>
-                <div id="custom-media-box-facebook" style="display: none;">
-                  <div class="dropzone" id="dropzone-facebook">
-                    <div class="dropzone-text">Upload custom photo/video for Facebook</div>
-                    <input type="file" id="media-facebook-input" style="display: none;" accept="video/*,image/*">
-                  </div>
-                  <div class="media-preview-container" id="media-preview-facebook" style="display: none;">
-                    <button class="btn-remove-media" id="btn-remove-facebook-media">✕ Remove</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="btn-group">
-              <button class="btn btn-secondary" id="btn-backto-step-1">⬅ Back</button>
-              <button class="btn btn-primary" id="btn-goto-step-3">Review & Approve ➔</button>
-            </div>
-          </div>
-
-          <!-- STEP 3: REVIEW & APPROVAL -->
-          <div class="card wizard-step" id="step-3" style="display: none;">
-            <div class="card-header">
-              <div class="step-indicator">STEP 3 OF 3</div>
-              <h2 class="card-title">Review & Approval</h2>
-            </div>
-
-            <div class="summary-box">
-              <ul class="summary-list">
-                <li id="sum-channels">📡 <strong>Channels:</strong> YouTube, X, LinkedIn</li>
-                <li id="sum-timing">⏰ <strong>Timing:</strong> Immediate</li>
-                <li id="sum-media">📁 <strong>Media:</strong> No media attached</li>
-                <li id="sum-yt-status">🔴 <strong>YouTube Status:</strong> Ready</li>
-              </ul>
-            </div>
-
-            <div class="approval-box">
-              <label class="approval-label">
-                <input type="checkbox" id="approval-checkbox">
-                <span>I have reviewed all content and approve this post to go live</span>
-              </label>
-            </div>
-
-            <div class="btn-group">
-              <button class="btn btn-secondary" id="btn-backto-step-2">⬅ Back</button>
-              <div style="display: flex; gap: 8px;">
-                <button class="btn btn-secondary" id="btn-save-draft">💾 Save as Draft</button>
-                <button class="btn btn-success" id="btn-publish-final" disabled>🚀 Approve & Publish</button>
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        <!-- Right Column: Auto-Syncing Social Previews -->
+        <!-- Right Pane: Live Spec Preview Inspector -->
         <div class="preview-column preview-sticky">
-          <div class="preview-tabs" id="preview-tabs-bar">
-            <button class="preview-tab active" data-preview="youtube">🔴 YouTube</button>
-            <button class="preview-tab" data-preview="x">🐦 X</button>
-            <button class="preview-tab" data-preview="linkedin">💼 LinkedIn</button>
-            <button class="preview-tab" data-preview="instagram">📸 Instagram</button>
-            <button class="preview-tab" data-preview="threads">🧵 Threads</button>
-            <button class="preview-tab" data-preview="facebook">📘 Facebook</button>
+          <div class="preview-header-bar">
+            <span class="section-label" style="margin-bottom: 0;">Live Feed Preview</span>
+            <div class="preview-tabs" id="preview-tabs-bar">
+              <button class="preview-tab active" data-preview="youtube">YouTube</button>
+              <button class="preview-tab" data-preview="x">X</button>
+              <button class="preview-tab" data-preview="linkedin">LinkedIn</button>
+              <button class="preview-tab" data-preview="instagram">Instagram</button>
+              <button class="preview-tab" data-preview="threads">Threads</button>
+              <button class="preview-tab" data-preview="facebook">Facebook</button>
+            </div>
           </div>
 
-          <!-- Device Shell -->
-          <div class="mockup-shell">
+          <div class="mockup-stage">
             
             <!-- YouTube Preview Card -->
             <div class="social-card yt-mockup preview-card" id="card-youtube">
               <div class="yt-desktop-player">
                 <div class="yt-media-layer" id="yt-preview-player">
-                  <span id="yt-player-placeholder">▶ Video Preview</span>
+                  <span id="yt-player-placeholder">16:9 Video Canvas</span>
                 </div>
                 <div class="yt-player-chrome">
                   <div class="yt-progress-bar">
@@ -371,7 +363,7 @@
                     <div class="yt-controls-left">
                       <svg class="yt-icon" viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg>
                       <svg class="yt-icon" viewBox="0 0 24 24"><path fill="#fff" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
-                      <span class="yt-timestamp">1:24 / 10:04</span>
+                      <span class="yt-timestamp">0:14 / 0:58</span>
                     </div>
                     <div class="yt-controls-right">
                       <svg class="yt-icon" viewBox="0 0 24 24"><path fill="#fff" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
@@ -379,15 +371,15 @@
                   </div>
                 </div>
               </div>
-              <div class="yt-title" id="yt-preview-title">Your Video Title Here</div>
+              <div class="yt-title" id="yt-preview-title">Untitled Video</div>
               <div class="yt-channel-row">
                 <div class="yt-avatar">S</div>
                 <div>
-                  <div style="font-weight: 600; font-size: 0.9rem;">Sathya Balan</div>
-                  <div style="font-size: 0.75rem; color: #aaa;">Channel • Just now</div>
+                  <div style="font-weight: 600; font-size: 13px;">Sathya Balan</div>
+                  <div style="font-size: 11.5px; color: #aaa;">Just now</div>
                 </div>
               </div>
-              <div class="yt-desc-box" id="yt-preview-desc">Video description will appear here...</div>
+              <div class="yt-desc-box" id="yt-preview-desc">Description preview...</div>
             </div>
 
             <!-- X Preview Card -->
@@ -402,13 +394,13 @@
                       <span class="x-handle">@sathyabalan · now</span>
                     </div>
                   </div>
-                  <div class="x-body" id="x-preview-text">What's happening? Type in the editor to see live tweet preview...</div>
+                  <div class="x-body" id="x-preview-text">Post text will render here...</div>
                   <div class="x-media-box" id="x-preview-media" style="display: none;"></div>
                   <div class="x-actions">
-                    <div class="x-action x-reply"><svg viewBox="0 0 24 24"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/></svg><span>12</span></div>
-                    <div class="x-action x-repost"><svg viewBox="0 0 24 24"><path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z"/></svg><span>48</span></div>
-                    <div class="x-action x-like"><svg viewBox="0 0 24 24"><path d="M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg><span>256</span></div>
-                    <div class="x-action x-bookmark"><svg viewBox="0 0 24 24"><path d="M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z"/></svg><span>8</span></div>
+                    <div class="x-action"><svg viewBox="0 0 24 24"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/></svg><span>12</span></div>
+                    <div class="x-action"><svg viewBox="0 0 24 24"><path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z"/></svg><span>48</span></div>
+                    <div class="x-action"><svg viewBox="0 0 24 24"><path d="M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg><span>256</span></div>
+                    <div class="x-action"><svg viewBox="0 0 24 24"><path d="M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z"/></svg><span>8</span></div>
                   </div>
                 </div>
               </div>
@@ -422,43 +414,28 @@
                   <div class="in-author-meta">
                     <div class="in-name-row">
                       <span class="in-name">Sathya Balan</span>
-                      <svg class="in-verified" viewBox="0 0 24 24" width="16" height="16"><path fill="#0a66c2" d="M12 2L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-3zm-2 14l-4-4 1.41-1.41L10 13.17l6.59-6.59L18 8l-8 8z"/></svg>
+                      <svg class="in-verified" viewBox="0 0 24 24" width="14" height="14"><path fill="#0a66c2" d="M12 2L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-3zm-2 14l-4-4 1.41-1.41L10 13.17l6.59-6.59L18 8l-8 8z"/></svg>
                     </div>
-                    <div class="in-headline">Senior Engineering & Automation Architect</div>
-                    <div class="in-timestamp">Just now • 🌐</div>
+                    <div class="in-headline">Engineering & Automation</div>
+                    <div class="in-timestamp">Just now</div>
                   </div>
                 </div>
                 <div class="in-body">
-                  <div class="in-text-clamped" id="li-preview-text">LinkedIn post narrative will appear here...</div>
+                  <div class="in-text-clamped" id="li-preview-text">Post narrative will render here...</div>
                   <span class="in-see-more">...see more</span>
                 </div>
                 <div class="in-media-card" id="li-preview-media-card" style="display: none;">
                   <div class="in-media-img" id="li-preview-media"></div>
                 </div>
                 <div class="in-engagement-counts">
-                  <div class="in-count-icons">
-                    <svg viewBox="0 0 16 16" width="16" height="16" fill="#0a66c2"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM6.5 11h-2V6.5h2V11zm-1-5.3a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2zm6 5.3h-2V8.6c0-.6 0-1.3-.8-1.3s-.9.6-.9 1.3V11h-2V6.5h1.9v.6h.1c.3-.5.9-1 1.8-1 2 0 2.3 1.3 2.3 2.9V11z"/></svg>
-                    <span>1,245</span>
-                  </div>
-                  <div class="in-count-text">42 comments • 18 reposts</div>
+                  <span>142 reactions</span>
+                  <span>18 comments</span>
                 </div>
                 <div class="in-action-bar">
-                  <button class="in-action-btn">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="#e1e9ee"><path d="M19.46 11l-3.91-3.91a7 7 0 01-1.69-2.74l-.49-1.47A2.76 2.76 0 0010.76 1 2.75 2.75 0 008 3.74v1.12a9.19 9.19 0 00.46 2.89L9 9h-4a2 2 0 00-2 2v9a2 2 0 002 2h13.14c.94 0 1.8-.6 2.05-1.51l2.45-8.9a2 2 0 00-2.18-2.59H19.46zM5 20H3v-9h2v9zm15.11-9.67l-2.45 8.9A.26.26 0 0117.43 19H7v-8h3.3l-1.07-3.21a7.1 7.1 0 01-.46-2.52V3.74A.75.75 0 019.5 3a.75.75 0 01.71.51l.5 1.48a9.14 9.14 0 002.16 3.55l4.31 4.31A1 1 0 0118 14h2.24a.2.2 0 01.19.22z"/></svg>
-                    <span>Like</span>
-                  </button>
-                  <button class="in-action-btn">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="#e1e9ee"><path d="M7 9h10v1H7zm0 4h7v-1H7zm16-2a6.78 6.78 0 01-2.84 5.61L12 22v-4H8A7 7 0 018 4h8a7 7 0 017 7zm-2 0a5 5 0 00-5-5H8a5 5 0 000 10h6v2.28L19.6 12z"/></svg>
-                    <span>Comment</span>
-                  </button>
-                  <button class="in-action-btn">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="#e1e9ee"><path d="M23 12l-4.61 5.05L17 15.6 20.39 12 17 8.4l1.39-1.45L23 12zM4.61 12L8 8.4 6.61 6.95 2 12l4.61 5.05L8 15.6 4.61 12zM12 4A8 8 0 004 12H2a10 10 0 0120 0h-2a8 8 0 00-8-8zm0 16a8 8 0 008-8h2a10 10 0 01-20 0h2a8 8 0 008 8z"/></svg>
-                    <span>Repost</span>
-                  </button>
-                  <button class="in-action-btn">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="#e1e9ee"><path d="M21 3L0 10l7.66 4.26L16 8l-6.26 8.34L14 24l7-21zm-2.6 3.2l-4.7 14.1-1.7-7.4 7.2-9.6L6.5 12.3 2.9 10.3l15.5-4.1z"/></svg>
-                    <span>Send</span>
-                  </button>
+                  <button class="in-action-btn">Like</button>
+                  <button class="in-action-btn">Comment</button>
+                  <button class="in-action-btn">Repost</button>
+                  <button class="in-action-btn">Send</button>
                 </div>
               </div>
             </div>
@@ -470,30 +447,22 @@
                   <div class="ig-feed-avatar">S</div>
                   <div class="ig-feed-author">
                     <span class="ig-feed-username">sathyabalan</span>
-                    <svg class="ig-verified" viewBox="0 0 24 24" width="14" height="14" fill="#0095f6"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-1.9 14.7L6 12.6l1.5-1.5 2.6 2.6 6.4-6.4 1.5 1.5-7.9 7.9z"/></svg>
-                    <span class="ig-feed-time">• 2h</span>
-                  </div>
-                  <div class="ig-feed-meatball">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><circle cx="12" cy="12" r="1.5"/><circle cx="6" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/></svg>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="#0095f6"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-1.9 14.7L6 12.6l1.5-1.5 2.6 2.6 6.4-6.4 1.5 1.5-7.9 7.9z"/></svg>
                   </div>
                 </div>
                 <div class="ig-feed-media" id="ig-preview-player">
-                  <span style="color:#666;">Photo / Reel Preview</span>
+                  <span>4:5 Media Canvas</span>
                 </div>
                 <div class="ig-feed-actions">
                   <div class="ig-action-group-left">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                  </div>
-                  <div class="ig-action-group-right">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                   </div>
                 </div>
-                <div class="ig-feed-likes">45,102 likes</div>
                 <div class="ig-feed-caption-area">
                   <span class="ig-feed-username">sathyabalan</span>
-                  <span class="ig-feed-caption" id="ig-preview-caption">Instagram caption will appear here...</span>
+                  <span id="ig-preview-caption" style="margin-left: 6px; color: #d4d4d8;">Caption preview...</span>
                 </div>
               </div>
             </div>
@@ -509,20 +478,11 @@
                   <div class="th-content-col">
                     <div class="th-header">
                       <span class="th-username">sathyabalan</span>
-                      <div class="th-header-right">
-                        <span class="th-time">2h</span>
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="#777"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                      </div>
+                      <span style="color:#777; font-size:12px;">now</span>
                     </div>
-                    <div class="th-body" id="threads-preview-text">Threads update preview...</div>
+                    <div class="th-body" id="threads-preview-text">Threads post preview...</div>
                     <div class="th-media" id="threads-preview-media" style="display: none;"></div>
-                    <div><span class="th-tag-pill" id="threads-topic-pill">#topic</span></div>
-                    <div class="th-actions" style="margin-top: 12px;">
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f3f5f7" stroke-width="2"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f3f5f7" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f3f5f7" stroke-width="2"><path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z"/></svg>
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f3f5f7" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                    </div>
+                    <div><span class="th-tag-pill" id="threads-topic-pill">topic</span></div>
                   </div>
                 </div>
               </div>
@@ -533,32 +493,17 @@
               <div class="fb-card">
                 <div class="fb-header">
                   <div class="fb-avatar">S</div>
-                  <div class="fb-author-meta">
+                  <div>
                     <div class="fb-name">Sathya Balan</div>
-                    <div class="fb-timestamp">
-                      Just now · 
-                      <svg viewBox="0 0 24 24" width="12" height="12" fill="#B0B3B8"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-                    </div>
-                  </div>
-                  <div class="fb-meatball">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="#B0B3B8"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                    <div class="fb-timestamp">Just now</div>
                   </div>
                 </div>
-                <div class="fb-body" id="fb-preview-text">Facebook post copy...</div>
+                <div class="fb-body" id="fb-preview-text">Facebook post preview...</div>
                 <div class="fb-media" id="fb-preview-media" style="display: none;"></div>
                 <div class="fb-action-bar">
-                  <button class="fb-action-btn">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="#B0B3B8"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
-                    Like
-                  </button>
-                  <button class="fb-action-btn">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="#B0B3B8"><path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18zM18 14H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
-                    Comment
-                  </button>
-                  <button class="fb-action-btn">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="#B0B3B8"><path d="M21 11l-7-7v4C7 9 4 14 3 19c2.5-3.5 6-5.1 11-5.1V18l7-7z"/></svg>
-                    Share
-                  </button>
+                  <button class="fb-action-btn">Like</button>
+                  <button class="fb-action-btn">Comment</button>
+                  <button class="fb-action-btn">Share</button>
                 </div>
               </div>
             </div>
@@ -569,15 +514,15 @@
       </div>
     </div>
 
-    <!-- TAB 2: QUEUE & HISTORY TABLE -->
+    <!-- VIEW 2: QUEUE & HISTORY -->
     <div id="tab-queue" class="tab-content" style="display: none;">
-      <div class="card">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <div class="panel">
+        <div class="panel-header">
           <div>
-            <h2 class="card-title">📋 Posts Queue</h2>
-            <p class="card-subtitle">Scheduled and published posts for the active client.</p>
+            <span class="panel-title">Posts Queue & History</span>
+            <span class="panel-subtitle" style="margin-left: 8px;">Scoped to active client workspace</span>
           </div>
-          <button class="btn btn-secondary" id="btn-refresh-queue">🔄 Refresh</button>
+          <button class="btn btn-secondary" id="btn-refresh-queue">Refresh</button>
         </div>
 
         <div class="table-responsive">
@@ -585,135 +530,133 @@
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Content Preview</th>
+                <th>Post Summary</th>
                 <th>Channels</th>
-                <th>Scheduled At</th>
+                <th>Scheduled</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th style="text-align: right;">Actions</th>
               </tr>
             </thead>
             <tbody id="posts-table-body">
-              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading posts...</td></tr>
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">Loading queue...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- TAB 3: CLIENTS & ACCOUNTS (AGENCY WORKSPACE) -->
+    <!-- VIEW 3: WORKSPACES & CLIENT APIS -->
     <div id="tab-clients" class="tab-content" style="display: none;">
-      <div class="card">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <div class="panel">
+        <div class="panel-header">
           <div>
-            <h2 class="card-title">🏢 Client Brand Clusters & Connected APIs</h2>
-            <p class="card-subtitle">Manage client profiles and link dedicated social channels & API keys to each brand.</p>
+            <span class="panel-title">Client Workspaces & API Vault</span>
+            <span class="panel-subtitle" style="margin-left: 8px;">AES-256-GCM encrypted credentials per client</span>
           </div>
-          <button class="btn btn-primary" id="btn-add-client" style="padding: 8px 16px; font-size: 0.85rem;">+ Add New Client</button>
+          <button class="btn btn-primary" id="btn-add-client">+ New Client</button>
         </div>
 
-        <!-- Add Client Inline Form -->
-        <div id="add-client-form" style="display: none; background: var(--bg-primary); padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border);">
-          <h4 style="margin-bottom: 12px;">Add New Client / Brand</h4>
-          <div style="display: flex; gap: 12px; align-items: center;">
-            <input type="text" id="new-client-name" placeholder="Client Name (e.g. Nike Running, Apex Dental)" style="flex: 1;">
-            <input type="color" id="new-client-color" value="#3B82F6" style="width: 44px; height: 42px; border-radius: 6px; padding: 2px; cursor: pointer;">
-            <button class="btn btn-success" id="btn-save-new-client">Save Client</button>
-            <button class="btn btn-secondary" id="btn-cancel-new-client">Cancel</button>
-          </div>
-        </div>
-
-        <!-- Add Channel Modal/Drawer for a Client -->
-        <div id="add-channel-modal" style="display: none; background: rgba(15, 23, 42, 0.98); border: 2px solid var(--accent); padding: 20px; border-radius: 12px; margin-bottom: 24px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h3 id="modal-client-title" style="color: var(--accent);">Connect Channel to Client</h3>
-            <button class="btn btn-secondary" id="btn-close-channel-modal" style="padding: 4px 10px; font-size: 0.8rem;">✕ Close</button>
-          </div>
-          
-          <input type="hidden" id="modal-client-id">
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
-            <div>
-              <label class="form-label" for="modal-platform-select">Platform</label>
-              <select id="modal-platform-select">
-                <option value="youtube">🔴 YouTube (Google OAuth)</option>
-                <option value="x">🐦 X / Twitter (API Keys)</option>
-                <option value="linkedin">💼 LinkedIn (Access Token)</option>
-                <option value="instagram">📸 Instagram (Meta Graph)</option>
-                <option value="threads">🧵 Threads (Meta API)</option>
-                <option value="facebook">📘 Facebook (Page Token)</option>
-              </select>
-            </div>
-            <div>
-              <label class="form-label" for="modal-account-name">Account Label / Handle</label>
-              <input type="text" id="modal-account-name" placeholder="e.g. Official Channel, @brandhandle">
+        <div class="panel-body">
+          <!-- Add Client Inline Bar -->
+          <div id="add-client-form" style="display: none; background: var(--bg-base); padding: 14px; border-radius: 6px; margin-bottom: 16px; border: 1px solid var(--border-default);">
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <input type="text" id="new-client-name" placeholder="Client or Brand Name (e.g. Acme Corp)" style="flex: 1;">
+              <input type="color" id="new-client-color" value="#fafafa" style="width: 38px; height: 36px; border-radius: 6px; padding: 2px; cursor: pointer; background: var(--bg-panel); border: 1px solid var(--border-default);">
+              <button class="btn btn-primary" id="btn-save-new-client">Create</button>
+              <button class="btn btn-ghost" id="btn-cancel-new-client">Cancel</button>
             </div>
           </div>
 
-          <!-- Dynamic Credentials Sub-Form -->
-          <div id="cred-fields-youtube" class="cred-fields-block" style="background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
-            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 10px;">Connect this client's YouTube channel via 1-click Google OAuth:</p>
-            <a href="#" id="modal-yt-oauth-btn" class="btn btn-primary" style="display: inline-block;">🔗 Authorize with Google for this Client</a>
+          <!-- Connect Channel Drawer -->
+          <div id="add-channel-modal" style="display: none; background: var(--bg-base); border: 1px solid var(--border-focus); padding: 18px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+              <span class="panel-title" id="modal-client-title">Connect Channel</span>
+              <button class="btn btn-ghost" id="btn-close-channel-modal" style="padding: 4px 8px; font-size: 12px;">Close</button>
+            </div>
+            
+            <input type="hidden" id="modal-client-id">
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+              <div>
+                <label class="form-label" for="modal-platform-select">Platform</label>
+                <select id="modal-platform-select" style="margin-top: 4px;">
+                  <option value="youtube">YouTube (OAuth 2.0)</option>
+                  <option value="x">X / Twitter (API v2)</option>
+                  <option value="linkedin">LinkedIn (Posts API)</option>
+                  <option value="instagram">Instagram (Graph API)</option>
+                  <option value="threads">Threads (Graph API)</option>
+                  <option value="facebook">Facebook (Page API)</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label" for="modal-account-name">Account Handle / Label</label>
+                <input type="text" id="modal-account-name" style="margin-top: 4px;" placeholder="e.g. @brandhandle">
+              </div>
+            </div>
+
+            <div id="cred-fields-youtube" class="cred-fields-block" style="background: var(--bg-panel); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 14px;">
+              <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 10px;">Authenticate this client's YouTube channel via Google OAuth 2.0:</p>
+              <a href="#" id="modal-yt-oauth-btn" class="btn btn-primary">Authorize Google Account</a>
+            </div>
+
+            <div id="cred-fields-x" class="cred-fields-block" style="display: none; background: var(--bg-panel); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 14px;">
+              <div class="field-row">
+                <label class="form-label" for="cred-x-apikey">Consumer API Key</label>
+                <input type="text" id="cred-x-apikey" style="margin-top: 4px;" placeholder="API Key">
+              </div>
+              <div class="field-row">
+                <label class="form-label" for="cred-x-token">Access Token / Bearer</label>
+                <input type="text" id="cred-x-token" style="margin-top: 4px;" placeholder="Access Token">
+              </div>
+            </div>
+
+            <div id="cred-fields-linkedin" class="cred-fields-block" style="display: none; background: var(--bg-panel); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 14px;">
+              <div class="field-row">
+                <label class="form-label" for="cred-li-token">OAuth Access Token</label>
+                <input type="text" id="cred-li-token" style="margin-top: 4px;" placeholder="Access Token">
+              </div>
+              <div class="field-row">
+                <label class="form-label" for="cred-li-urn">Author URN</label>
+                <input type="text" id="cred-li-urn" style="margin-top: 4px;" placeholder="urn:li:person:... or urn:li:organization:...">
+              </div>
+            </div>
+
+            <div id="cred-fields-instagram" class="cred-fields-block" style="display: none; background: var(--bg-panel); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 14px;">
+              <div class="field-row">
+                <label class="form-label" for="cred-ig-token">Meta Graph Access Token</label>
+                <input type="text" id="cred-ig-token" style="margin-top: 4px;" placeholder="Long-lived token">
+              </div>
+              <div class="field-row">
+                <label class="form-label" for="cred-ig-id">Instagram Business Account ID</label>
+                <input type="text" id="cred-ig-id" style="margin-top: 4px;" placeholder="178414000...">
+              </div>
+            </div>
+
+            <div id="cred-fields-threads" class="cred-fields-block" style="display: none; background: var(--bg-panel); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 14px;">
+              <div class="field-row">
+                <label class="form-label" for="cred-threads-token">Threads User Access Token</label>
+                <input type="text" id="cred-threads-token" style="margin-top: 4px;" placeholder="Threads Access Token">
+              </div>
+            </div>
+
+            <div id="cred-fields-facebook" class="cred-fields-block" style="display: none; background: var(--bg-panel); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 14px;">
+              <div class="field-row">
+                <label class="form-label" for="cred-fb-token">Page Access Token</label>
+                <input type="text" id="cred-fb-token" style="margin-top: 4px;" placeholder="Permanent Page Token">
+              </div>
+              <div class="field-row">
+                <label class="form-label" for="cred-fb-pageid">Page ID</label>
+                <input type="text" id="cred-fb-pageid" style="margin-top: 4px;" placeholder="Numeric Page ID">
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+              <button class="btn btn-ghost" id="btn-cancel-modal">Cancel</button>
+              <button class="btn btn-primary" id="btn-save-channel-creds">Save to Encrypted Vault</button>
+            </div>
           </div>
 
-          <div id="cred-fields-x" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
-            <div class="form-group" style="margin-bottom: 10px;">
-              <label class="form-label" for="cred-x-apikey">API Key / Consumer Key</label>
-              <input type="text" id="cred-x-apikey" placeholder="Enter X API Key">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="cred-x-token">Access Token / Bearer Token</label>
-              <input type="text" id="cred-x-token" placeholder="Enter X Access Token">
-            </div>
-          </div>
-
-          <div id="cred-fields-linkedin" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
-            <div class="form-group" style="margin-bottom: 10px;">
-              <label class="form-label" for="cred-li-token">LinkedIn Access Token</label>
-              <input type="text" id="cred-li-token" placeholder="Enter OAuth Access Token">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="cred-li-urn">Person or Organization URN</label>
-              <input type="text" id="cred-li-urn" placeholder="urn:li:person:... or urn:li:organization:...">
-            </div>
-          </div>
-
-          <div id="cred-fields-instagram" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
-            <div class="form-group" style="margin-bottom: 10px;">
-              <label class="form-label" for="cred-ig-token">Meta Graph Access Token</label>
-              <input type="text" id="cred-ig-token" placeholder="Long-lived User or Page Token">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="cred-ig-id">Instagram Business Account ID</label>
-              <input type="text" id="cred-ig-id" placeholder="178414000...">
-            </div>
-          </div>
-
-          <div id="cred-fields-threads" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="cred-threads-token">Threads Access Token</label>
-              <input type="text" id="cred-threads-token" placeholder="Threads User Access Token">
-            </div>
-          </div>
-
-          <div id="cred-fields-facebook" class="cred-fields-block" style="display: none; background: var(--bg-primary); padding: 14px; border-radius: 8px; margin-bottom: 16px;">
-            <div class="form-group" style="margin-bottom: 10px;">
-              <label class="form-label" for="cred-fb-token">Facebook Page Access Token</label>
-              <input type="text" id="cred-fb-token" placeholder="Permanent Page Access Token">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="cred-fb-pageid">Facebook Page ID</label>
-              <input type="text" id="cred-fb-pageid" placeholder="Page numeric ID">
-            </div>
-          </div>
-
-          <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button class="btn btn-secondary" id="btn-cancel-modal">Cancel</button>
-            <button class="btn btn-success" id="btn-save-channel-creds">Save Credentials (AES-256 Encrypted)</button>
-          </div>
-        </div>
-
-        <div id="clients-list-container" style="display: grid; gap: 16px;">
-          <!-- Loaded dynamically with connected accounts badges -->
+          <div id="clients-list-container" style="display: grid; gap: 12px;"></div>
         </div>
       </div>
     </div>
