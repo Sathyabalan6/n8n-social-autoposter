@@ -721,7 +721,7 @@ async function submitPost() {
 
     const data = await res.json();
     if (data.success) {
-      alert(`🎉 Post #${data.postId} ${data.post.status === 'scheduled' ? 'Scheduled Successfully!' : 'Published Successfully!'}`);
+      showToast(`🎉 Post #${data.postId} ${data.post.status === 'scheduled' ? 'Scheduled Successfully!' : 'Published Successfully!'}`, 'success');
 
       // Reset Form
       el.masterText.value = '';
@@ -743,10 +743,10 @@ async function submitPost() {
 
       document.querySelector('[data-target="tab-queue"]').click();
     } else {
-      alert(`Error publishing post: ${data.error}`);
+      showToast(`Error publishing post: ${data.error}`, 'error');
     }
   } catch (err) {
-    alert(`Network error submitting post: ${err.message}`);
+    showToast(`Network error submitting post: ${err.message}`, 'error');
   } finally {
     el.btnPublishFinal.disabled = false;
     el.btnPublishFinal.textContent = '🚀 Approve & Publish Now';
@@ -869,9 +869,10 @@ async function deletePost(id) {
   if (!confirm(`Delete Post #${id}?`)) return;
   try {
     await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+    showToast(`Post #${id} deleted successfully.`, 'success');
     fetchQueue();
   } catch (err) {
-    alert(`Failed to delete: ${err.message}`);
+    showToast(`Failed to delete: ${err.message}`, 'error');
   }
 }
 
@@ -898,6 +899,33 @@ async function fetchStatus() {
   } catch (err) {
     console.error('Error fetching status:', err);
   }
+}
+
+// Toast Notification System
+function showToast(message, type = 'info') {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+
+  container.appendChild(toast);
+  setTimeout(() => toast.classList.add('show'), 10);
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      if (toast.parentElement) {
+        toast.parentElement.removeChild(toast);
+      }
+    }, 300);
+  }, 4000);
 }
 
 // Helper utility to safely clear child nodes

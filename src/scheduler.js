@@ -1,14 +1,16 @@
 /**
- * Background Scheduler
+ * Background Scheduler & Cleanup Daemon
  * Checks the SQLite database every minute for posts where status = 'scheduled' and scheduled_at <= now()
- * Runs inside the Node.js process without any external cron daemon or Redis!
+ * Automatically purges temporary uploads for completed posts after 24h retention window!
  */
 
+const fs = require('node:fs');
 const db = require('./db');
 const { dispatchPost } = require('./platforms');
 
 const workerId = `worker-${process.pid}-${Math.round(Math.random() * 1e6)}`;
 let timerId = null;
+let gcCounter = 0;
 
 async function checkAndProcessDuePosts() {
   try {
@@ -27,6 +29,55 @@ async function checkAndProcessDuePosts() {
     }
   } catch (err) {
     console.error('[Scheduler] Queue processing error:', err.message);
+  }
+
+  // Run media garbage collector once every 10 cycles (~10 minutes)
+  gcCounter += 1;
+  if (gcCounter >= 10) {
+    gcCounter = 0;
+    cleanupOldMedia();
+  }
+}
+
+/**
+ * Purges media files for posts completed > 24 hours ago to prevent disk exhaustion
+ */
+function cleanupOldMedia() {
+  try {
+    const posts = db.getAllPosts();
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+    for (const post of posts) {
+      if (post.status === 'completed' && post.updated_at) {
+        const updateTime = new Date(post.updated_at).getTime();
+        if (updateTime < oneDayAgo) {
+          // Remove master media
+          if (post.media_path && fs.existsSync(post.media_path)) {
+            try {
+              fs.unlinkSync(post.media_path);
+              console.log(`[GC] Cleaned up master media file for Post #${post.id}`);
+            } catch {
+              // ignore deletion err
+            }
+          }
+          // Remove custom overrides
+          const overrides = post.media_overrides || {};
+          for (const key of Object.keys(overrides)) {
+            const p = overrides[key]?.path;
+            if (p && fs.existsSync(p)) {
+              try {
+                fs.unlinkSync(p);
+                console.log(`[GC] Cleaned up ${key} media file for Post #${post.id}`);
+              } catch {
+                // ignore deletion err
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[GC] Garbage collection error:', err.message);
   }
 }
 
@@ -52,5 +103,6 @@ function stopScheduler() {
 module.exports = {
   startScheduler,
   stopScheduler,
-  checkAndProcessDuePosts
+  checkAndProcessDuePosts,
+  cleanupOldMedia
 };

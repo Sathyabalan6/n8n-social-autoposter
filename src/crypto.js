@@ -6,7 +6,10 @@ const TAG_LENGTH = 16;
 const SALT = 'socialpulse-vault-salt-2026';
 
 function getMasterKey() {
-  const secret = process.env.ENCRYPTION_SECRET || 'socialpulse-default-vault-key-32b!';
+  const secret = process.env.ENCRYPTION_SECRET;
+  if (!secret) {
+    throw new Error('[Security Exception] ENCRYPTION_SECRET environment variable is missing. Halting to prevent unencrypted operations.');
+  }
   return crypto.pbkdf2Sync(secret, SALT, 100000, 32, 'sha256');
 }
 

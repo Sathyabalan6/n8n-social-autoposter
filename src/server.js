@@ -19,18 +19,33 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// Allowed safe extensions
+const ALLOWED_MIME_TYPES = new Set([
+  'video/mp4', 'video/quicktime', 'video/x-msvideo',
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf'
+]);
+
 // Multer storage
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    const ext = path.extname(file.originalname).toLowerCase();
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     cb(null, `${unique}${ext}`);
   }
 });
+
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 } // 500MB max
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${file.mimetype} is not allowed. Only video, image, or PDF files are permitted.`));
+    }
+  }
 });
 const uploadFields = upload.fields([
   { name: 'media', maxCount: 1 },
@@ -132,17 +147,19 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       media_overrides: mediaOverrides
     };
 
-    // If immediate, dispatch right away!
+    // 1. Audit trail: persist initial record first
+    postRecord.status = compiled.is_scheduled ? 'scheduled' : 'processing';
+    const id = db.insertPost(postRecord);
+    postRecord.id = id;
+
+    // 2. If immediate, dispatch and update status
     if (!compiled.is_scheduled) {
       const { results, finalStatus, errorSummary } = await dispatchPost(postRecord);
       postRecord.status = finalStatus;
       postRecord.results = results;
       postRecord.error_summary = errorSummary;
-    } else {
-      postRecord.status = 'scheduled';
+      db.updatePostStatus(id, finalStatus, results, errorSummary);
     }
-
-    const id = db.insertPost(postRecord);
 
     res.json({
       success: true,
