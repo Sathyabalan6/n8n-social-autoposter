@@ -1,0 +1,134 @@
+const fs = require('node:fs');
+const { google } = require('googleapis');
+const db = require('../db');
+
+function getOAuth2Client() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/youtube/callback';
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Google OAuth credentials not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env');
+  }
+
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+function getStoredTokens() {
+  const tokensJson = db.getSetting('youtube_tokens');
+  if (tokensJson) {
+    try {
+      return JSON.parse(tokensJson);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function saveTokens(tokens) {
+  db.setSetting('youtube_tokens', tokens);
+}
+
+function getAuthUrl() {
+  const oauth2Client = getOAuth2Client();
+  const scopes = [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.readonly'
+  ];
+
+  return oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: scopes,
+    prompt: 'consent'
+  });
+}
+
+async function handleAuthCallback(code) {
+  const oauth2Client = getOAuth2Client();
+  const { tokens } = await oauth2Client.getToken(code);
+  saveTokens(tokens);
+  return tokens;
+}
+
+async function publishYouTube(post) {
+  const tokens = getStoredTokens();
+  if (!tokens || (!tokens.refresh_token && !tokens.access_token)) {
+    return {
+      platform: 'youtube',
+      success: false,
+      error: 'YouTube is not connected. Please connect your YouTube account via settings or /auth/youtube.'
+    };
+  }
+
+  if (!post.media_path || !fs.existsSync(post.media_path)) {
+    return {
+      platform: 'youtube',
+      success: false,
+      error: 'YouTube upload requires a video file, but none was provided or the file is missing.'
+    };
+  }
+
+  const oauth2Client = getOAuth2Client();
+  oauth2Client.setCredentials(tokens);
+
+  // Auto-listen for refreshed tokens
+  oauth2Client.on('tokens', (newTokens) => {
+    const updated = { ...tokens, ...newTokens };
+    saveTokens(updated);
+  });
+
+  const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+  const tags = (post.youtube_tags || '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean);
+
+  const requestBody = {
+    snippet: {
+      title: post.youtube_title || post.master_text.slice(0, 70),
+      description: post.master_text,
+      tags
+    },
+    status: {
+      privacyStatus: post.youtube_privacy || 'unlisted',
+      selfDeclaredMadeForKids: false
+    }
+  };
+
+  const media = {
+    body: fs.createReadStream(post.media_path)
+  };
+
+  try {
+    const res = await youtube.videos.insert({
+      part: ['snippet', 'status'],
+      requestBody,
+      media
+    });
+
+    const videoId = res.data.id;
+    return {
+      platform: 'youtube',
+      success: true,
+      videoId,
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      shortsUrl: `https://youtube.com/shorts/${videoId}`
+    };
+  } catch (err) {
+    return {
+      platform: 'youtube',
+      success: false,
+      error: err.response?.data?.error?.message || err.message
+    };
+  }
+}
+
+module.exports = {
+  getAuthUrl,
+  handleAuthCallback,
+  getStoredTokens,
+  saveTokens,
+  publishYouTube
+};

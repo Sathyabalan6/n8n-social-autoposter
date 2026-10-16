@@ -1,0 +1,28 @@
+{
+  "name": "post_automation",
+  "version": "1.0.0",
+  "description": "An automated publishing system built directly inside your local n8n instance (`http://127.0.0.1:5678`).",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sathyabalan6/n8n-social-autoposter.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Sathyabalan6/n8n-social-autoposter/issues"
+  },
+  "homepage": "https://github.com/Sathyabalan6/n8n-social-autoposter#readme",
+  "dependencies": {
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "googleapis": "^186.0.0",
+    "multer": "^2.4.0"
+  }
+}

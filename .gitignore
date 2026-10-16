@@ -1,10 +1,25 @@
-# Ignore uploaded media files
+# Secrets & Environment
+.env
+.env.local
+
+# Databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Media uploads
 uploads/
+public/uploads/
 *.mp4
 *.mov
 *.avi
+*.jpg
+*.jpeg
+*.png
+*.webp
 
-# Node / OS files
+# Dependencies & OS files
 node_modules/
 .DS_Store
 Thumbs.db
+npm-debug.log*
