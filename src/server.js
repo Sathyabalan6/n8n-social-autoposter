@@ -224,13 +224,18 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       media_overrides: mediaOverrides
     };
 
-    // 1. Audit trail: persist initial record first
-    postRecord.status = compiled.is_scheduled ? 'scheduled' : 'processing';
+    // Check if user chose "Save as Draft"
+    if (body.action === 'draft') {
+      postRecord.status = 'draft';
+    } else {
+      postRecord.status = compiled.is_scheduled ? 'scheduled' : 'processing';
+    }
+
     const id = db.insertPost(postRecord);
     postRecord.id = id;
 
-    // 2. If immediate, dispatch and update status
-    if (!compiled.is_scheduled) {
+    // 2. If immediate and not draft, dispatch and update status
+    if (body.action !== 'draft' && !compiled.is_scheduled) {
       const { results, finalStatus, errorSummary } = await dispatchPost(postRecord);
       postRecord.status = finalStatus;
       postRecord.results = results;
@@ -263,7 +268,75 @@ app.get('/api/posts', (req, res) => {
   }
 });
 
-// 5. Delete post
+// 5. Update / Edit post
+app.put('/api/posts/:id', uploadFields, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const existing = db.getPostById(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    const body = req.body;
+    let platforms = [];
+    if (typeof body.platforms === 'string') {
+      try {
+        platforms = JSON.parse(body.platforms);
+      } catch {
+        platforms = [body.platforms];
+      }
+    } else if (Array.isArray(body.platforms)) {
+      platforms = body.platforms;
+    }
+
+    const compiled = compilePost({
+      ...body,
+      platforms: platforms.length ? platforms : existing.platforms
+    });
+
+    const files = req.files || {};
+    let mediaPath = existing.media_path;
+    let mediaFilename = existing.media_filename;
+    let mediaMimetype = existing.media_mimetype;
+
+    if (files.media && files.media[0]) {
+      mediaPath = files.media[0].path;
+      mediaFilename = files.media[0].originalname;
+      mediaMimetype = files.media[0].mimetype;
+    }
+
+    const mediaOverrides = existing.media_overrides || {};
+    const platformKeys = ['youtube', 'x', 'linkedin', 'instagram', 'threads', 'facebook'];
+    for (const key of platformKeys) {
+      const fieldKey = `media_${key}`;
+      if (files[fieldKey] && files[fieldKey][0]) {
+        mediaOverrides[key] = {
+          path: files[fieldKey][0].path,
+          filename: files[fieldKey][0].originalname,
+          mimetype: files[fieldKey][0].mimetype
+        };
+      }
+    }
+
+    const status = body.action === 'draft' ? 'draft' : (compiled.is_scheduled ? 'scheduled' : 'completed');
+
+    db.updatePostContent(id, {
+      ...compiled,
+      status,
+      media_path: mediaPath,
+      media_filename: mediaFilename,
+      media_mimetype: mediaMimetype,
+      media_overrides: mediaOverrides
+    });
+
+    res.json({ success: true, postId: id });
+  } catch (err) {
+    console.error('Error updating post:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Delete post
 app.delete('/api/posts/:id', (req, res) => {
   try {
     db.deletePost(req.params.id);

@@ -15,16 +15,18 @@ function getOAuth2Client() {
 }
 
 function getStoredTokens(clientId = null) {
-  // If clientId is provided, query client's specific account
+  // Enforce strict client isolation: query client's specific account
   if (clientId) {
     const clientAccounts = db.getAccountsByClient(clientId);
     const ytAccount = clientAccounts.find((a) => a.platform === 'youtube');
     if (ytAccount && ytAccount.tokens) {
       return ytAccount.tokens;
     }
+    // Return null if this specific client has not connected YouTube
+    return null;
   }
 
-  // Fallback to global vault tokens
+  // Fallback only if no client is specified at all
   const tokensJson = db.getSetting('youtube_tokens');
   if (tokensJson) {
     try {

@@ -266,6 +266,56 @@ module.exports = {
     const now = new Date().toISOString();
     stmtUpdateStatus.run(status, now, JSON.stringify(results), errorSummary, id);
   },
+  updatePostContent: (id, updatedFields) => {
+    const now = new Date().toISOString();
+    const existing = stmtGetById.get(id);
+    if (!existing) return null;
+
+    const stmtUpdateFull = db.prepare(`
+      UPDATE posts SET
+        master_text = ?,
+        master_hashtags = ?,
+        platforms = ?,
+        scheduled_at = ?,
+        status = ?,
+        youtube_title = ?,
+        youtube_privacy = ?,
+        x_post = ?,
+        linkedin_post = ?,
+        instagram_caption = ?,
+        threads_post = ?,
+        facebook_post = ?,
+        media_path = COALESCE(?, media_path),
+        media_filename = COALESCE(?, media_filename),
+        media_mimetype = COALESCE(?, media_mimetype),
+        media_overrides = COALESCE(?, media_overrides),
+        updated_at = ?
+      WHERE id = ?
+    `);
+
+    stmtUpdateFull.run(
+      updatedFields.master_text || existing.master_text,
+      updatedFields.master_hashtags !== undefined ? updatedFields.master_hashtags : existing.master_hashtags,
+      JSON.stringify(updatedFields.platforms || safeJsonParse(existing.platforms, [])),
+      updatedFields.scheduled_at || existing.scheduled_at,
+      updatedFields.status || existing.status,
+      updatedFields.youtube_title || existing.youtube_title,
+      updatedFields.youtube_privacy || existing.youtube_privacy,
+      updatedFields.x_post || existing.x_post,
+      updatedFields.linkedin_post || existing.linkedin_post,
+      updatedFields.instagram_caption || existing.instagram_caption,
+      updatedFields.threads_post || existing.threads_post,
+      updatedFields.facebook_post || existing.facebook_post,
+      updatedFields.media_path || null,
+      updatedFields.media_filename || null,
+      updatedFields.media_mimetype || null,
+      updatedFields.media_overrides ? JSON.stringify(updatedFields.media_overrides) : null,
+      now,
+      id
+    );
+
+    return true;
+  },
   deletePost: (id) => {
     stmtDelete.run(id);
   },

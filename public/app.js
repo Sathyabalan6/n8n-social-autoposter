@@ -70,6 +70,7 @@ const el = {
   approvalCheckbox: document.getElementById('approval-checkbox'),
   btnBacktoStep2: document.getElementById('btn-backto-step-2'),
   btnPublishFinal: document.getElementById('btn-publish-final'),
+  btnSaveDraft: document.getElementById('btn-save-draft'),
 
   // Char Counts
   masterCharCount: document.getElementById('master-char-count'),
@@ -646,7 +647,10 @@ function setupWizardNavigation() {
     el.btnPublishFinal.disabled = !el.approvalCheckbox.checked;
   });
 
-  el.btnPublishFinal.addEventListener('click', submitPost);
+  el.btnPublishFinal.addEventListener('click', () => submitPost('publish'));
+  if (el.btnSaveDraft) {
+    el.btnSaveDraft.addEventListener('click', () => submitPost('draft'));
+  }
   el.btnRefreshQueue.addEventListener('click', fetchQueue);
 }
 
@@ -686,19 +690,25 @@ function updateReviewSummary() {
   }
 }
 
-// --- SUBMIT POST ---
-async function submitPost() {
-  el.btnPublishFinal.disabled = true;
-  el.btnPublishFinal.textContent = '⏳ Processing & Publishing...';
+// --- SUBMIT POST (Draft, Scheduled, or Immediate) ---
+async function submitPost(action = 'publish') {
+  const isEditing = Boolean(state.editingPostId);
+  const submitBtn = action === 'draft' ? el.btnSaveDraft : el.btnPublishFinal;
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = action === 'draft' ? '⏳ Saving Draft...' : '⏳ Processing & Publishing...';
+  }
 
   const formData = new FormData();
   formData.append('client_id', state.activeClientId);
   formData.append('master_text', el.masterText.value.trim());
   formData.append('master_hashtags', el.masterHashtags.value.trim());
   formData.append('platforms', JSON.stringify(state.selectedPlatforms));
+  formData.append('action', action);
 
   const isSched = document.querySelector('input[name="timing"]:checked').value === 'scheduled';
-  if (isSched) {
+  if (isSched && action !== 'draft') {
     formData.append('schedule_date', el.scheduleDate.value);
     formData.append('schedule_time', el.scheduleTime.value);
   }
@@ -741,16 +751,21 @@ async function submitPost() {
   }
 
   try {
-    const res = await fetch('/api/posts', {
-      method: 'POST',
+    const endpoint = isEditing ? `/api/posts/${state.editingPostId}` : '/api/posts';
+    const method = isEditing ? 'PUT' : 'POST';
+
+    const res = await fetch(endpoint, {
+      method,
       body: formData
     });
 
     const data = await res.json();
     if (data.success) {
-      showToast(`🎉 Post #${data.postId} ${data.post.status === 'scheduled' ? 'Scheduled Successfully!' : 'Published Successfully!'}`, 'success');
+      const msg = action === 'draft' ? 'Draft Saved Successfully! 💾' : (isSched ? 'Scheduled Successfully! ⏰' : 'Published Successfully! 🚀');
+      showToast(`🎉 Post #${data.postId} ${msg}`, 'success');
 
-      // Reset Form
+      // Reset Form & Editing State
+      state.editingPostId = null;
       el.masterText.value = '';
       el.masterHashtags.value = '';
       el.ytTitle.value = '';
@@ -770,13 +785,15 @@ async function submitPost() {
 
       document.querySelector('[data-target="tab-queue"]').click();
     } else {
-      showToast(`Error publishing post: ${data.error}`, 'error');
+      showToast(`Error saving post: ${data.error}`, 'error');
     }
   } catch (err) {
     showToast(`Network error submitting post: ${err.message}`, 'error');
   } finally {
-    el.btnPublishFinal.disabled = false;
-    el.btnPublishFinal.textContent = '🚀 Approve & Publish Now';
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = action === 'draft' ? '💾 Save as Draft' : '🚀 Approve & Publish';
+    }
   }
 }
 
@@ -851,7 +868,9 @@ async function fetchQueue() {
       // Status
       const tdStatus = document.createElement('td');
       const spanStatus = document.createElement('span');
-      const statusClass = post.status === 'completed' ? 'badge-success' : (post.status === 'scheduled' ? 'badge-warning' : 'badge-danger');
+      const statusClass = post.status === 'completed'
+        ? 'badge-success'
+        : (post.status === 'scheduled' ? 'badge-warning' : (post.status === 'draft' ? 'badge-draft' : 'badge-danger'));
       spanStatus.className = `badge ${statusClass}`;
       spanStatus.textContent = post.status;
       tdStatus.appendChild(spanStatus);
@@ -869,6 +888,15 @@ async function fetchQueue() {
         aYt.textContent = '▶ YouTube';
         tdActions.appendChild(aYt);
       }
+      const btnEdit = document.createElement('button');
+      btnEdit.className = 'btn btn-secondary';
+      btnEdit.style.padding = '4px 8px';
+      btnEdit.style.fontSize = '0.75rem';
+      btnEdit.style.marginRight = '4px';
+      btnEdit.textContent = '✏️ Edit';
+      btnEdit.addEventListener('click', () => loadPostIntoWizard(post));
+      tdActions.appendChild(btnEdit);
+
       const btnDel = document.createElement('button');
       btnDel.className = 'btn btn-secondary';
       btnDel.style.padding = '4px 8px';
@@ -1334,4 +1362,58 @@ function appendBoldLabel(container, labelText, valueText) {
   const span = document.createElement('span');
   span.textContent = valueText;
   container.appendChild(span);
+}
+
+// --- LOAD POST INTO WIZARD FOR EDITING ---
+function loadPostIntoWizard(post) {
+  state.editingPostId = post.id;
+  state.activeClientId = post.client_id || 1;
+  state.selectedPlatforms = post.platforms || ['youtube'];
+
+  const headerSelect = document.getElementById('header-client-select');
+  const wizardSelect = document.getElementById('wizard-client-select');
+  if (headerSelect) headerSelect.value = String(state.activeClientId);
+  if (wizardSelect) wizardSelect.value = String(state.activeClientId);
+
+  el.masterText.value = post.master_text || '';
+  el.masterHashtags.value = post.master_hashtags || '';
+  el.ytTitle.value = post.youtube_title || '';
+  el.ytPrivacy.value = post.youtube_privacy || 'unlisted';
+  el.xOverride.value = post.x_post || '';
+  el.liOverride.value = post.linkedin_post || '';
+  el.igOverride.value = post.instagram_caption || '';
+  el.threadsOverride.value = post.threads_post || '';
+  if (el.fbOverride) el.fbOverride.value = post.facebook_post || '';
+
+  if (post.status === 'scheduled' && post.scheduled_at) {
+    const rSched = document.querySelector('input[name="timing"][value="scheduled"]');
+    if (rSched) rSched.checked = true;
+    el.scheduleInputs.style.display = 'flex';
+    const dt = new Date(post.scheduled_at);
+    el.scheduleDate.value = dt.toISOString().split('T')[0];
+    const hrs = String(dt.getHours()).padStart(2, '0');
+    const mins = String(dt.getMinutes()).padStart(2, '0');
+    el.scheduleTime.value = `${hrs}:${mins}`;
+  } else {
+    const rNow = document.querySelector('input[name="timing"][value="now"]');
+    if (rNow) rNow.checked = true;
+    el.scheduleInputs.style.display = 'none';
+  }
+
+  el.platformCards.forEach((c) => {
+    const p = c.getAttribute('data-platform');
+    c.classList.toggle('selected', state.selectedPlatforms.includes(p));
+  });
+
+  updateLivePreviews();
+  updateReviewSummary();
+
+  const tabWizard = document.querySelector('[data-target="tab-wizard"]');
+  if (tabWizard) tabWizard.click();
+  el.step2.style.display = 'none';
+  el.step3.style.display = 'none';
+  el.step1.style.display = 'block';
+  state.currentStep = 1;
+
+  showToast(`Loaded Post #${post.id} into editor for editing.`, 'info');
 }

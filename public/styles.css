@@ -1278,6 +1278,16 @@ tr:hover {
 .badge-success { background: rgba(16, 185, 129, 0.2); color: var(--success); }
 .badge-warning { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
 .badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+.badge-draft { background: rgba(148, 163, 184, 0.2); color: var(--text-secondary); }
+
+.platform-card.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.8);
+}
+.platform-card.disabled:hover {
+  background: var(--bg-primary);
+}
 
 /* Toast Notification Container */
 .toast-container {
