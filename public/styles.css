@@ -564,6 +564,12 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  pointer-events: none; /* Let video clicks pass through */
+}
+
+/* Hide mock overlay controls when real video controls are present */
+.yt-desktop-player.has-video .yt-player-chrome {
+  display: none;
 }
 
 .yt-progress-bar {

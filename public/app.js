@@ -282,10 +282,13 @@ function setupPlatformCustomMedia() {
       r.addEventListener('change', () => {
         if (r.value === 'custom') {
           customBox.style.display = 'block';
-          state.platformMedia[p].custom = true;
+          state.platformMedia[p].mode = 'custom';
+        } else if (r.value === 'none') {
+          customBox.style.display = 'none';
+          state.platformMedia[p].mode = 'none';
         } else {
           customBox.style.display = 'none';
-          state.platformMedia[p].custom = false;
+          state.platformMedia[p].mode = 'master';
         }
         renderPreviewMedia(p);
       });
@@ -354,12 +357,26 @@ function setupPlatformCustomMedia() {
   });
 }
 
-// Get the active media object for a platform (Custom overrides Master)
+// Get the active media object for a platform
 function getEffectiveMedia(platform) {
   const custom = state.platformMedia[platform];
-  if (custom && custom.custom && custom.url) {
-    return custom;
+  const mode = custom ? custom.mode || (custom.custom ? 'custom' : 'master') : 'master';
+
+  // 1. Explicitly disabled media for this channel
+  if (mode === 'none') {
+    return { file: null, url: null, type: null };
   }
+
+  // 2. Custom media uploaded for this channel
+  if (mode === 'custom') {
+    if (custom && custom.url) {
+      return custom;
+    }
+    // When custom is chosen but no file is selected yet, vanish the master media!
+    return { file: null, url: null, type: null };
+  }
+
+  // 3. Default: inherit master media
   return state.masterMedia;
 }
 
@@ -369,7 +386,9 @@ function renderPreviewMedia(platform) {
 
   if (platform === 'youtube') {
     clearElement(el.ytPreviewPlayer);
+    const desktopPlayer = document.querySelector('.yt-desktop-player');
     if (media.url && media.type === 'video') {
+      if (desktopPlayer) desktopPlayer.classList.add('has-video');
       const v = document.createElement('video');
       v.src = media.url;
       v.controls = true;
@@ -378,6 +397,7 @@ function renderPreviewMedia(platform) {
       v.style.objectFit = 'cover';
       el.ytPreviewPlayer.appendChild(v);
     } else if (media.url) {
+      if (desktopPlayer) desktopPlayer.classList.remove('has-video');
       const img = document.createElement('img');
       img.src = media.url;
       img.style.width = '100%';
@@ -385,6 +405,7 @@ function renderPreviewMedia(platform) {
       img.style.objectFit = 'cover';
       el.ytPreviewPlayer.appendChild(img);
     } else {
+      if (desktopPlayer) desktopPlayer.classList.remove('has-video');
       const s = document.createElement('span');
       s.textContent = '▶ Video Preview';
       el.ytPreviewPlayer.appendChild(s);
