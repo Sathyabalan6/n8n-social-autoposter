@@ -14,7 +14,7 @@ let gcCounter = 0;
 
 async function checkAndProcessDuePosts() {
   try {
-    let job = db.claimNextJob(workerId, 45000); // 45s atomic lease lock
+    let job = db.claimNextJob(workerId, 300000); // 5-minute atomic lease lock for media transfers
 
     while (job) {
       console.log(`[Scheduler] ${workerId} atomically claimed Job #${job.id} (Attempt ${job.attempts})`);
@@ -25,7 +25,7 @@ async function checkAndProcessDuePosts() {
       console.log(`[Scheduler] Job #${job.id} resolved with status: ${finalStatus}`);
 
       // Claim next available job in queue
-      job = db.claimNextJob(workerId, 45000);
+      job = db.claimNextJob(workerId, 300000);
     }
   } catch (err) {
     console.error('[Scheduler] Queue processing error:', err.message);

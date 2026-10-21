@@ -104,11 +104,11 @@ SocialPulse employs a **Two-Stage Unified Dispatch Pipeline** in `src/platforms/
 - **Authentication:** Google OAuth2 with offline refresh token persistence.
 - **Proactive Token Refresh:** If token expiry is within a 5-minute window (`T-300s`), the adapter proactively refreshes the access token prior to initiating long video stream uploads.
 - **Upload Protocol:** Direct streaming multipart upload to `youtube.videos.insert` with configurable privacy (`public`, `unlisted`, `private`).
-- **SimClusters Category Taxonomy:** Injects `snippet.categoryId` (e.g. `28` for Science & Technology, `27` for Education) to route the video into the optimal algorithmic audience cluster.
+- **Audience Category Taxonomy:** Injects `snippet.categoryId` (e.g. `28` for Science & Technology, `27` for Education) to route the video into the optimal algorithmic audience cluster.
 - **Compliance Gates:** Strictly asserts `status.selfDeclaredMadeForKids` (COPPA) and `status.containsSyntheticMedia` (AI transparency) booleans.
 - **Notification Shield:** Passes `notifySubscribers` parameter in the upload endpoint URL query string (disabling mass subscriber notifications for high-frequency Shorts).
-- **High-Res Thumbnail Pipeline:** Immediately calls `POST /upload/youtube/v3/thumbnails/set` with custom or extracted thumbnail bytes (up to 50MB) before video release.
-- **Pinned First-Comment:** Posts external links via `youtube.commentThreads.insert`.
+- **High-Res Thumbnail Pipeline:** Immediately calls `POST /upload/youtube/v3/thumbnails/set` with custom or extracted thumbnail bytes (up to YouTube API 2MB limit) before video release.
+- **Top-Level First-Comment:** Posts external links via `youtube.commentThreads.insert`.
 
 ### 4.2. X / Twitter API v2 (`src/platforms/x.js`)
 - **OAuth 1.0a HMAC-SHA1 Signer:** Built entirely in native `node:crypto`. Percent-encodes base strings and computes SHA-1 HMAC signatures deterministically without third-party dependencies.

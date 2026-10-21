@@ -174,10 +174,17 @@ async function dispatchPost(post) {
   const results = {};
   const errors = [];
   const successes = [];
+  const existingResults = post.results || {};
 
   // --- STAGE 1: CONCURRENT PRIMARY DISPATCHES ---
   const dispatchPromises = platforms.map(async (p) => {
     const key = p.toLowerCase();
+
+    // Idempotency Guard: Skip platforms that already succeeded on prior attempts
+    if (existingResults[key] && existingResults[key].success) {
+      return { platformKey: key, platformName: p, res: existingResults[key], alreadyDone: true };
+    }
+
     try {
       let res;
       if (key.includes('youtube')) {

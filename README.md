@@ -12,11 +12,11 @@ Unlike traditional social media schedulers that act as "dumb pipes" (stripping r
    - External links in main post copy cut organic reach by up to **80% on X** and **40% on LinkedIn**.
    - SocialPulse automatically detects external URLs in body copy and decouples them into an automated **First Comment / Threaded Reply**, dispatched 5 seconds after publication.
 2. **Deep Algorithmic Reach Knobs:**
-   - **YouTube:** Custom 50MB thumbnails (`thumbnails.set`), SimClusters Category taxonomy (`snippet.categoryId`), COPPA compliance (`selfDeclaredMadeForKids`), AI disclosure (`containsSyntheticMedia`), and notification shielding (`notifySubscribers=false`).
-   - **X (Twitter):** Media Alt-Text injection (`metadata/create.json`), universal reply opening (`reply_settings: "everyone"` to preserve 150x reply weights), and threaded replies (`in_reply_to_tweet_id`).
+   - **YouTube:** Custom thumbnails (`thumbnails.set` up to 2MB API limit), Topic Category taxonomy (`snippet.categoryId`), COPPA compliance (`selfDeclaredMadeForKids`), AI disclosure (`containsSyntheticMedia`), and notification shielding (`notifySubscribers=false`).
+   - **X (Twitter):** Media Alt-Text injection (`metadata/create.json`), SimClusters & Heavy Ranker alignment (`reply_settings: "everyone"` to preserve 150x reply weights), and threaded replies (`in_reply_to_tweet_id`).
    - **LinkedIn:** Swipeable PDF document carousels (`urn:li:document`), forced comment velocity (`isReshareDisabledByAuthor: true`), and comment-edge links.
    - **Instagram:** Reels format routing (`media_type: "REELS"`), custom audio indexing (`audio_name`), and Explore-only distribution testing (`trial_params`).
-   - **Meta Threads:** Relational quote chains (`quote_post_id`) and asymmetric quota exploitation (1,000 replies/day).
+   - **Meta Threads:** Relational quote chains (`quote_post_id`) and asymmetric quota utilization (1,000 replies/day).
 3. **Interactive Editorial Calendar (Month & Week Views):**
    - Full drag-and-drop calendar planning. Drag a post to any day to reschedule it instantly while preserving its scheduled time.
    - Quick-schedule `+` button on any day cell pre-fills the composer with that date.
@@ -159,11 +159,11 @@ Open your browser at:
 
 | Feature | Buffer (Commercial SaaS) | SocialPulse Studio |
 | :--- | :--- | :--- |
-| **Cost** | $6 to $12 / channel / mo | **$0 / Free forever** |
+| **Cost** | $6 to $12 / channel / mo | **$0 (Self-Hosted, No SaaS Fees)** |
 | **Data Privacy** | Cloud SaaS (Third-party servers) | **100% On-Premise & Encrypted** |
 | **Infrastructure** | Proprietary Cloud | **Native Node.js 24 + Embedded SQLite** |
 | **Link Anti-Penalty (First Comment)** | Paid Add-on (limited channels) | **Native Automated Decoupling (X, LinkedIn, IG, YT)** |
-| **YouTube Reach Knobs** | Basic Title/Desc only | **Categories, 50MB thumbs, COPPA, AI flags, Notify shield** |
+| **YouTube Reach Knobs** | Basic Title/Desc only | **Categories, Custom thumbs, COPPA, AI flags, Notify shield** |
 | **X Heavy Ranker Knobs** | Basic text | **Alt-text injection, 150x reply settings locked** |
 | **LinkedIn Engagement Knobs** | Basic post | **PDF carousels, Disable-Reshare comment trigger** |
 | **Editorial Calendar** | Interactive drag-and-drop | **Interactive HTML5 drag-and-drop** |

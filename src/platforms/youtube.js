@@ -74,6 +74,12 @@ async function handleAuthCallback(code, stateParam = null) {
 async function uploadYouTubeThumbnail(videoId, thumbnailPath, oauth2Client) {
   if (!thumbnailPath || !fs.existsSync(thumbnailPath)) return null;
   try {
+    const fileStats = fs.statSync(thumbnailPath);
+    if (fileStats.size > 2 * 1024 * 1024) {
+      console.error('[YouTube Adapter] Custom thumbnail exceeds YouTube API 2MB limit:', fileStats.size);
+      return { success: false, error: 'Thumbnail exceeds YouTube Data API 2MB ceiling. Please resize image under 2MB.' };
+    }
+
     const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
     const res = await youtube.thumbnails.set({
       videoId,

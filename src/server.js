@@ -63,6 +63,54 @@ const uploadFields = upload.fields([
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+function safeGetUrlHost(urlStr) {
+  if (!urlStr) return null;
+  try {
+    return new URL(urlStr).host;
+  } catch {
+    return null;
+  }
+}
+
+function safeGetUrlOrigin(urlStr) {
+  if (!urlStr) return null;
+  try {
+    return new URL(urlStr).origin;
+  } catch {
+    return null;
+  }
+}
+
+// Security Middleware: Prevent DNS rebinding and cross-site request attacks
+app.use((req, res, next) => {
+  const host = req.headers.host || '';
+  const origin = req.headers.origin;
+
+  // Allow localhost / 127.0.0.1 or configured BASE_URL host
+  const isLocalHost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
+  const configuredHost = safeGetUrlHost(process.env.BASE_URL);
+
+  if (!isLocalHost && configuredHost && host !== configuredHost) {
+    return res.status(403).json({ success: false, error: 'Forbidden: Invalid Host Header' });
+  }
+
+  if (origin) {
+    try {
+      const originUrl = new URL(origin);
+      const isLocalOrigin = originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1';
+      const configuredOrigin = safeGetUrlOrigin(process.env.BASE_URL);
+      if (!isLocalOrigin && configuredOrigin && origin !== configuredOrigin) {
+        return res.status(403).json({ success: false, error: 'Forbidden: Cross-Origin Request Blocked' });
+      }
+    } catch {
+      return res.status(403).json({ success: false, error: 'Forbidden: Malformed Origin Header' });
+    }
+  }
+
+  next();
+});
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // --- API ROUTES ---
@@ -466,6 +514,14 @@ app.patch('/api/posts/:id/schedule', (req, res) => {
       return res.status(404).json({ success: false, error: 'Post not found' });
     }
 
+    // Safety Invariant: Never reschedule already completed posts to prevent duplicate broadcasts
+    if (existing.status === 'completed') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot reschedule a completed post. Please duplicate or create a new post to schedule again.'
+      });
+    }
+
     // Retain draft status if already draft; otherwise transition back to scheduled
     const newStatus = existing.status === 'draft' ? 'draft' : 'scheduled';
     db.updatePostSchedule(id, scheduled_at, newStatus);
@@ -530,9 +586,11 @@ app.get('/auth/youtube/callback', async (req, res) => {
 // Start background scheduler & HTTP server
 startScheduler(60000);
 
-app.listen(PORT, () => {
+const HOST = process.env.HOST || '127.0.0.1';
+
+app.listen(PORT, HOST, () => {
   console.log(`=======================================================`);
   console.log(`🚀 Social Media Auto-Poster Web App running at:`);
-  console.log(`👉 http://localhost:${PORT}`);
+  console.log(`👉 http://${HOST}:${PORT}`);
   console.log(`=======================================================`);
 });

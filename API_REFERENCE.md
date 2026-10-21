@@ -170,7 +170,7 @@ Content-Type: multipart/form-data
 **File Attachments (Multipart):**
 - `media`: Master video, image, or document.
 - `media_youtube`, `media_x`, `media_linkedin`, etc.: Platform-specific media overrides.
-- `youtube_custom_thumb`: Custom thumbnail image file (up to 50MB).
+- `youtube_custom_thumb`: Custom thumbnail image file (up to 2MB API ceiling).
 - `linkedin_doc`: Swipeable PDF document carousel asset.
 
 **Response (200 OK):**
