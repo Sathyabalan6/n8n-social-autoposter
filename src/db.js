@@ -65,7 +65,17 @@ db.exec(`
     first_comment TEXT,
     worker_id TEXT,
     locked_until INTEGER DEFAULT 0,
-    attempts INTEGER DEFAULT 0
+    attempts INTEGER DEFAULT 0,
+    youtube_category_id TEXT DEFAULT '28',
+    youtube_made_for_kids INTEGER DEFAULT 0,
+    youtube_synthetic_media INTEGER DEFAULT 0,
+    youtube_notify_subscribers INTEGER DEFAULT 1,
+    youtube_custom_thumb_path TEXT,
+    x_alt_text TEXT,
+    linkedin_disable_reshare INTEGER DEFAULT 0,
+    linkedin_doc_path TEXT,
+    instagram_audio_name TEXT,
+    instagram_is_trial INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS settings (
@@ -82,7 +92,17 @@ const migrations = [
   'ALTER TABLE posts ADD COLUMN worker_id TEXT;',
   'ALTER TABLE posts ADD COLUMN locked_until INTEGER DEFAULT 0;',
   'ALTER TABLE posts ADD COLUMN attempts INTEGER DEFAULT 0;',
-  'ALTER TABLE posts ADD COLUMN media_overrides TEXT;'
+  'ALTER TABLE posts ADD COLUMN media_overrides TEXT;',
+  "ALTER TABLE posts ADD COLUMN youtube_category_id TEXT DEFAULT '28';",
+  'ALTER TABLE posts ADD COLUMN youtube_made_for_kids INTEGER DEFAULT 0;',
+  'ALTER TABLE posts ADD COLUMN youtube_synthetic_media INTEGER DEFAULT 0;',
+  'ALTER TABLE posts ADD COLUMN youtube_notify_subscribers INTEGER DEFAULT 1;',
+  'ALTER TABLE posts ADD COLUMN youtube_custom_thumb_path TEXT;',
+  'ALTER TABLE posts ADD COLUMN x_alt_text TEXT;',
+  'ALTER TABLE posts ADD COLUMN linkedin_disable_reshare INTEGER DEFAULT 0;',
+  'ALTER TABLE posts ADD COLUMN linkedin_doc_path TEXT;',
+  'ALTER TABLE posts ADD COLUMN instagram_audio_name TEXT;',
+  'ALTER TABLE posts ADD COLUMN instagram_is_trial INTEGER DEFAULT 0;'
 ];
 
 for (const sql of migrations) {
@@ -127,13 +147,17 @@ const stmtInsert = db.prepare(`
     media_path, media_filename, media_mimetype, media_overrides, platforms,
     youtube_title, youtube_tags, youtube_privacy,
     x_post, linkedin_post, instagram_caption, threads_post, facebook_post,
-    results, error_summary, first_comment, attempts
+    results, error_summary, first_comment, attempts,
+    youtube_category_id, youtube_made_for_kids, youtube_synthetic_media, youtube_notify_subscribers, youtube_custom_thumb_path,
+    x_alt_text, linkedin_disable_reshare, linkedin_doc_path, instagram_audio_name, instagram_is_trial
   ) VALUES (
     ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
     ?, ?, ?,
     ?, ?, ?, ?, ?,
-    ?, ?, ?, ?
+    ?, ?, ?, ?,
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?
   )
 `);
 
@@ -154,6 +178,7 @@ const stmtGetByClient = db.prepare(`
 
 const stmtGetById = db.prepare(`SELECT * FROM posts WHERE id = ?`);
 const stmtUpdateStatus = db.prepare(`UPDATE posts SET status = ?, updated_at = ?, results = ?, error_summary = ? WHERE id = ?`);
+const stmtUpdateSchedule = db.prepare(`UPDATE posts SET scheduled_at = ?, status = ?, updated_at = ? WHERE id = ?`);
 const stmtDelete = db.prepare(`DELETE FROM posts WHERE id = ?`);
 
 // Clients Statements
@@ -201,7 +226,17 @@ module.exports = {
       JSON.stringify(post.results || {}),
       post.error_summary || '',
       post.first_comment || '',
-      post.attempts || 0
+      post.attempts || 0,
+      post.youtube_category_id || '28',
+      post.youtube_made_for_kids ? 1 : 0,
+      post.youtube_synthetic_media ? 1 : 0,
+      post.youtube_notify_subscribers !== undefined ? (post.youtube_notify_subscribers ? 1 : 0) : 1,
+      post.youtube_custom_thumb_path || '',
+      post.x_alt_text || '',
+      post.linkedin_disable_reshare ? 1 : 0,
+      post.linkedin_doc_path || '',
+      post.instagram_audio_name || '',
+      post.instagram_is_trial ? 1 : 0
     );
     return result.lastInsertRowid;
   },
@@ -266,6 +301,11 @@ module.exports = {
     const now = new Date().toISOString();
     stmtUpdateStatus.run(status, now, JSON.stringify(results), errorSummary, id);
   },
+  updatePostSchedule: (id, scheduledAt, status = 'scheduled') => {
+    const now = new Date().toISOString();
+    stmtUpdateSchedule.run(scheduledAt, status, now, id);
+    return true;
+  },
   updatePostContent: (id, updatedFields) => {
     const now = new Date().toISOString();
     const existing = stmtGetById.get(id);
@@ -279,6 +319,7 @@ module.exports = {
         scheduled_at = ?,
         status = ?,
         youtube_title = ?,
+        youtube_tags = ?,
         youtube_privacy = ?,
         x_post = ?,
         linkedin_post = ?,
@@ -289,6 +330,17 @@ module.exports = {
         media_filename = COALESCE(?, media_filename),
         media_mimetype = COALESCE(?, media_mimetype),
         media_overrides = COALESCE(?, media_overrides),
+        first_comment = ?,
+        youtube_category_id = ?,
+        youtube_made_for_kids = ?,
+        youtube_synthetic_media = ?,
+        youtube_notify_subscribers = ?,
+        youtube_custom_thumb_path = COALESCE(?, youtube_custom_thumb_path),
+        x_alt_text = ?,
+        linkedin_disable_reshare = ?,
+        linkedin_doc_path = COALESCE(?, linkedin_doc_path),
+        instagram_audio_name = ?,
+        instagram_is_trial = ?,
         updated_at = ?
       WHERE id = ?
     `);
@@ -300,6 +352,7 @@ module.exports = {
       updatedFields.scheduled_at || existing.scheduled_at,
       updatedFields.status || existing.status,
       updatedFields.youtube_title || existing.youtube_title,
+      updatedFields.youtube_tags !== undefined ? updatedFields.youtube_tags : existing.youtube_tags,
       updatedFields.youtube_privacy || existing.youtube_privacy,
       updatedFields.x_post || existing.x_post,
       updatedFields.linkedin_post || existing.linkedin_post,
@@ -310,6 +363,17 @@ module.exports = {
       updatedFields.media_filename || null,
       updatedFields.media_mimetype || null,
       updatedFields.media_overrides ? JSON.stringify(updatedFields.media_overrides) : null,
+      updatedFields.first_comment !== undefined ? updatedFields.first_comment : existing.first_comment,
+      updatedFields.youtube_category_id !== undefined ? updatedFields.youtube_category_id : (existing.youtube_category_id || '28'),
+      updatedFields.youtube_made_for_kids !== undefined ? (updatedFields.youtube_made_for_kids ? 1 : 0) : (existing.youtube_made_for_kids || 0),
+      updatedFields.youtube_synthetic_media !== undefined ? (updatedFields.youtube_synthetic_media ? 1 : 0) : (existing.youtube_synthetic_media || 0),
+      updatedFields.youtube_notify_subscribers !== undefined ? (updatedFields.youtube_notify_subscribers ? 1 : 0) : (existing.youtube_notify_subscribers ?? 1),
+      updatedFields.youtube_custom_thumb_path || null,
+      updatedFields.x_alt_text !== undefined ? updatedFields.x_alt_text : existing.x_alt_text,
+      updatedFields.linkedin_disable_reshare !== undefined ? (updatedFields.linkedin_disable_reshare ? 1 : 0) : (existing.linkedin_disable_reshare || 0),
+      updatedFields.linkedin_doc_path || null,
+      updatedFields.instagram_audio_name !== undefined ? updatedFields.instagram_audio_name : existing.instagram_audio_name,
+      updatedFields.instagram_is_trial !== undefined ? (updatedFields.instagram_is_trial ? 1 : 0) : (existing.instagram_is_trial || 0),
       now,
       id
     );

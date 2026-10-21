@@ -71,6 +71,51 @@ async function handleAuthCallback(code, stateParam = null) {
   return tokens;
 }
 
+async function uploadYouTubeThumbnail(videoId, thumbnailPath, oauth2Client) {
+  if (!thumbnailPath || !fs.existsSync(thumbnailPath)) return null;
+  try {
+    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+    const res = await youtube.thumbnails.set({
+      videoId,
+      media: {
+        body: fs.createReadStream(thumbnailPath)
+      }
+    });
+    return { success: true, url: res.data?.items?.[0]?.default?.url };
+  } catch (err) {
+    console.error('[YouTube Adapter] Custom thumbnail upload failed:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+async function postYouTubeFirstComment(videoId, commentText, clientId = null) {
+  const tokens = getStoredTokens(clientId);
+  if (!tokens) throw new Error('YouTube credentials missing for this client.');
+
+  const oauth2Client = getOAuth2Client();
+  oauth2Client.setCredentials(tokens);
+  const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+  const res = await youtube.commentThreads.insert({
+    part: ['snippet'],
+    requestBody: {
+      snippet: {
+        videoId,
+        topLevelComment: {
+          snippet: {
+            textOriginal: commentText.trim()
+          }
+        }
+      }
+    }
+  });
+
+  return {
+    success: true,
+    commentId: res.data.id
+  };
+}
+
 async function publishYouTube(post) {
   const tokens = getStoredTokens(post.client_id);
   if (!tokens || (!tokens.refresh_token && !tokens.access_token)) {
@@ -125,13 +170,19 @@ async function publishYouTube(post) {
     snippet: {
       title: post.youtube_title || post.master_text.slice(0, 70),
       description: post.master_text,
-      tags
+      tags,
+      categoryId: post.youtube_category_id || '28',
+      defaultLanguage: 'en'
     },
     status: {
       privacyStatus: post.youtube_privacy || 'unlisted',
-      selfDeclaredMadeForKids: false
+      selfDeclaredMadeForKids: Boolean(post.youtube_made_for_kids),
+      containsSyntheticMedia: Boolean(post.youtube_synthetic_media),
+      embeddable: true
     }
   };
+
+  const notifySubscribers = post.youtube_notify_subscribers !== undefined ? Boolean(post.youtube_notify_subscribers) : true;
 
   const media = {
     body: fs.createReadStream(mediaPath)
@@ -140,17 +191,27 @@ async function publishYouTube(post) {
   try {
     const res = await youtube.videos.insert({
       part: ['snippet', 'status'],
+      notifySubscribers,
       requestBody,
       media
     });
 
     const videoId = res.data.id;
+
+    // Upload custom thumbnail if provided (up to 50MB)
+    let thumbResult = null;
+    const thumbPath = post.youtube_custom_thumb_path;
+    if (thumbPath && fs.existsSync(thumbPath)) {
+      thumbResult = await uploadYouTubeThumbnail(videoId, thumbPath, oauth2Client);
+    }
+
     return {
       platform: 'youtube',
       success: true,
       videoId,
       url: `https://www.youtube.com/watch?v=${videoId}`,
-      shortsUrl: `https://youtube.com/shorts/${videoId}`
+      shortsUrl: `https://youtube.com/shorts/${videoId}`,
+      thumbnailUploaded: Boolean(thumbResult?.success)
     };
   } catch (err) {
     return {
@@ -166,5 +227,7 @@ module.exports = {
   handleAuthCallback,
   getStoredTokens,
   saveTokens,
-  publishYouTube
+  publishYouTube,
+  uploadYouTubeThumbnail,
+  postYouTubeFirstComment
 };

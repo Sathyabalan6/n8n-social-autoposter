@@ -5,9 +5,10 @@ const express = require('express');
 const multer = require('multer');
 
 const db = require('./db');
-const { compilePost } = require('./compiler');
+const { compilePost, YOUTUBE_CATEGORIES } = require('./compiler');
 const { dispatchPost } = require('./platforms');
 const { getAuthUrl, handleAuthCallback, getStoredTokens } = require('./platforms/youtube');
+const { inspectMedia, transcodeToVertical, extractThumbnail } = require('./media/transcoder');
 const { startScheduler } = require('./scheduler');
 
 const app = express();
@@ -54,7 +55,9 @@ const uploadFields = upload.fields([
   { name: 'media_linkedin', maxCount: 1 },
   { name: 'media_instagram', maxCount: 1 },
   { name: 'media_threads', maxCount: 1 },
-  { name: 'media_facebook', maxCount: 1 }
+  { name: 'media_facebook', maxCount: 1 },
+  { name: 'youtube_custom_thumb', maxCount: 1 },
+  { name: 'linkedin_doc', maxCount: 1 }
 ]);
 
 // Middleware
@@ -158,6 +161,11 @@ app.delete('/api/accounts/:id', (req, res) => {
   }
 });
 
+// 1b. YouTube Categories Taxonomy
+app.get('/api/youtube/categories', (_req, res) => {
+  res.json({ success: true, categories: YOUTUBE_CATEGORIES });
+});
+
 // 2. Live Validation & Preview compiler
 app.post('/api/compile', (req, res) => {
   try {
@@ -165,6 +173,85 @@ app.post('/api/compile', (req, res) => {
     res.json({ success: true, compiled });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// --- MEDIA ENGINE & TRANSCODING ROUTES ---
+app.post('/api/media/inspect', upload.single('media'), async (req, res) => {
+  try {
+    let filePath = req.file?.path;
+    if (!filePath && req.body.filename) {
+      filePath = path.join(uploadDir, path.basename(req.body.filename));
+    }
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(400).json({ success: false, error: 'No media file provided or file does not exist.' });
+    }
+
+    const info = await inspectMedia(filePath);
+    res.json({ success: true, info });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/media/transcode/vertical', upload.single('media'), async (req, res) => {
+  try {
+    let inputPath = req.file?.path;
+    let originalName = req.file?.originalname || req.body.filename || 'video.mp4';
+
+    if (!inputPath && req.body.filename) {
+      inputPath = path.join(uploadDir, path.basename(req.body.filename));
+    }
+
+    if (!inputPath || !fs.existsSync(inputPath)) {
+      return res.status(400).json({ success: false, error: 'No media file provided or file not found.' });
+    }
+
+    const ext = path.extname(originalName);
+    const baseName = path.basename(originalName, ext);
+    const outFilename = `vertical-${Date.now()}-${baseName}.mp4`;
+    const outputPath = path.join(uploadDir, outFilename);
+
+    await transcodeToVertical(inputPath, outputPath);
+    const info = await inspectMedia(outputPath);
+
+    res.json({
+      success: true,
+      filename: outFilename,
+      path: outputPath,
+      url: `/uploads/${outFilename}`,
+      info
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/media/thumbnail', async (req, res) => {
+  try {
+    const { filename, timestamp } = req.body;
+    if (!filename) {
+      return res.status(400).json({ success: false, error: 'filename is required' });
+    }
+
+    const inputPath = path.join(uploadDir, path.basename(filename));
+    if (!fs.existsSync(inputPath)) {
+      return res.status(404).json({ success: false, error: 'Input file not found' });
+    }
+
+    const thumbFilename = `thumb-${Date.now()}.jpg`;
+    const outputPath = path.join(uploadDir, thumbFilename);
+
+    await extractThumbnail(inputPath, outputPath, timestamp || '00:00:01');
+
+    res.json({
+      success: true,
+      filename: thumbFilename,
+      path: outputPath,
+      url: `/uploads/${thumbFilename}`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -199,6 +286,16 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       mediaMimetype = files.media[0].mimetype;
     }
 
+    let ytCustomThumb = compiled.youtube_custom_thumb_path;
+    if (files.youtube_custom_thumb && files.youtube_custom_thumb[0]) {
+      ytCustomThumb = files.youtube_custom_thumb[0].path;
+    }
+
+    let liDocPath = compiled.linkedin_doc_path;
+    if (files.linkedin_doc && files.linkedin_doc[0]) {
+      liDocPath = files.linkedin_doc[0].path;
+    }
+
     // Process per-platform media overrides
     const mediaOverrides = {};
     const platformKeys = ['youtube', 'x', 'linkedin', 'instagram', 'threads', 'facebook'];
@@ -221,7 +318,9 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       media_path: mediaPath,
       media_filename: mediaFilename,
       media_mimetype: mediaMimetype,
-      media_overrides: mediaOverrides
+      media_overrides: mediaOverrides,
+      youtube_custom_thumb_path: ytCustomThumb,
+      linkedin_doc_path: liDocPath
     };
 
     // Check if user chose "Save as Draft"
@@ -305,6 +404,16 @@ app.put('/api/posts/:id', uploadFields, async (req, res) => {
       mediaMimetype = files.media[0].mimetype;
     }
 
+    let ytCustomThumb = compiled.youtube_custom_thumb_path || existing.youtube_custom_thumb_path;
+    if (files.youtube_custom_thumb && files.youtube_custom_thumb[0]) {
+      ytCustomThumb = files.youtube_custom_thumb[0].path;
+    }
+
+    let liDocPath = compiled.linkedin_doc_path || existing.linkedin_doc_path;
+    if (files.linkedin_doc && files.linkedin_doc[0]) {
+      liDocPath = files.linkedin_doc[0].path;
+    }
+
     const mediaOverrides = existing.media_overrides || {};
     const platformKeys = ['youtube', 'x', 'linkedin', 'instagram', 'threads', 'facebook'];
     for (const key of platformKeys) {
@@ -318,7 +427,12 @@ app.put('/api/posts/:id', uploadFields, async (req, res) => {
       }
     }
 
-    const status = body.action === 'draft' ? 'draft' : (compiled.is_scheduled ? 'scheduled' : 'completed');
+    let status = 'completed';
+    if (body.action === 'draft') {
+      status = 'draft';
+    } else if (compiled.is_scheduled) {
+      status = 'scheduled';
+    }
 
     db.updatePostContent(id, {
       ...compiled,
@@ -326,12 +440,38 @@ app.put('/api/posts/:id', uploadFields, async (req, res) => {
       media_path: mediaPath,
       media_filename: mediaFilename,
       media_mimetype: mediaMimetype,
-      media_overrides: mediaOverrides
+      media_overrides: mediaOverrides,
+      youtube_custom_thumb_path: ytCustomThumb,
+      linkedin_doc_path: liDocPath
     });
 
     res.json({ success: true, postId: id });
   } catch (err) {
     console.error('Error updating post:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5b. Reschedule post (Atomic for Calendar Drag-and-Drop)
+app.patch('/api/posts/:id/schedule', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { scheduled_at } = req.body;
+    if (!scheduled_at) {
+      return res.status(400).json({ success: false, error: 'scheduled_at is required' });
+    }
+
+    const existing = db.getPostById(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    // Retain draft status if already draft; otherwise transition back to scheduled
+    const newStatus = existing.status === 'draft' ? 'draft' : 'scheduled';
+    db.updatePostSchedule(id, scheduled_at, newStatus);
+
+    res.json({ success: true, id, scheduled_at, status: newStatus });
+  } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
