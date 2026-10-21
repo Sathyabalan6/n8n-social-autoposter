@@ -1,36 +1,51 @@
-# 🚀 SocialPulse Studio — Future Evolution & Improvements Roadmap (V2)
+# 🚀 SocialPulse Studio — Evolution Roadmap & Future Improvement Backlog
 
-This execution plan documents the technical findings, architectural trade-offs, and phased blueprints for the 5 Pillars of Enterprise Evolution. **Keep this document as a ready-to-execute specification for future development.**
-
----
-
-## 🧭 Executive Architecture Strategy
-
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    Enterprise Evolution (5 Pillars)                     │
-├────────────────────┬────────────────────┬───────────────────────────────┤
-│ Pillar 1: R2 S3    │ Pillar 2: Dual     │ Pillar 3: Dynamic             │
-│ Media Ingestion    │ Snapshot Analytics │ Recurring Queue Slots         │
-│ (Zero-egress Presign)│ (T+24h & T+7d)   │ (Intl DST Timezone Math)      │
-├────────────────────┴────────────────────┼───────────────────────────────┤
-│ Pillar 4: Task-Based Actionable Inbox   │ Pillar 5: Single-Use Client   │
-│ (8/10 Feasibility Quick Responder)      │ Magic Links (HMAC-SHA256)     │
-└─────────────────────────────────────────┴───────────────────────────────┘
-```
+This document tracks completed enterprise features and provides ready-to-execute engineering blueprints for pending improvements and production hardening.
 
 ---
 
-## 📌 Pillar 1: Public Media Ingestion for Meta (Cloudflare R2 / S3 Presigned Bridge)
+## 🧭 Subsystem Implementation Matrix
 
-### Key Technical Findings
+| Subsystem / Pillar | Status | Core Capability |
+| :--- | :---: | :--- |
+| **Pillar 1: Meta Media Ingestion (R2/S3)** | 🟡 **Pending** | Presigned S3/R2 upload bridge for Instagram Reels / Facebook crawler |
+| **Pillar 2: Post Analytics Daemon** | 🟡 **Pending** | T+24h and T+7d dual-snapshot metric tracker ($0.01/post on X) |
+| **Pillar 3: Recurring Queue Slots** | 🟢 **COMPLETED** | Buffer-style auto-slotting using native `Intl` DST timezone math |
+| **Pillar 4: Actionable Task Inbox** | 🟡 **Pending** | Task-based comment reply queue bypassing 2/10 feasibility sync traps |
+| **Pillar 5: Client Approval Magic Links** | 🟢 **COMPLETED** | Passwordless single-use HMAC-SHA256 client review portal (`/review/:id`) |
+| **Pillar 6: FFmpeg Worker Thread Isolation** | 🟡 **Pending** | Offload video transcoding from main event loop to worker threads |
+| **Pillar 7: Open-Source Governance & CI** | 🟡 **Pending** | GitHub Actions workflow, AGPL/MIT license, `SECURITY.md`, `CONTRIBUTING.md` |
+
+---
+
+## 🟢 Completed Subsystems (Already Built & Verified)
+
+### ✅ Pillar 3: Smart Recurring Queue Slots ("Buffer-Style Scheduling")
+- [x] **3.1. Schedule Rules Schema:** Added `queue_rules` table in SQLite (`client_id`, `timezone`, `iso_weekday`, `local_time`).
+- [x] **3.2. Pure Node.js DST-Aware Algorithm:** Implemented `calculateNextAvailableSlot()` in `src/compiler.js` using native `Intl.DateTimeFormat`.
+- [x] **3.3. REST Endpoints:** Exposed `GET/POST /api/clients/:id/queue-rules`, `DELETE /api/queue-rules/:id`, and `GET /api/clients/:id/next-slot`.
+- [x] **3.4. UI Integration:** Added "Add to Queue" option in Composer with live slot preview, and an interactive Weekly Schedule manager in **Workspaces & APIs**.
+
+### ✅ Pillar 5: Multi-Tenant Team Workflows & Client Review Magic Links
+- [x] **5.1. Cryptographic Nonce Engine (`src/crypto.js`):** Implemented `generateApprovalToken()` and `validateApprovalToken()` using HMAC-SHA256 and `crypto.timingSafeEqual()`.
+- [x] **5.2. Single-Use Nonce Enforced:** The database nullifies `approval_token_hash` immediately upon client approval.
+- [x] **5.3. Standalone Mobile Review Portal:** Created `GET /review/:id?token=...` allowing external clients to approve/reject posts without a password.
+- [x] **5.4. Dashboard Link Generator:** One-click "⚡ Magic Approval Link" button in Calendar and Queue modals.
+
+---
+
+## 🟡 Remaining Things to Be Fixed & Implemented (Future Backlog)
+
+### 📌 Pillar 1: Public Media Ingestion for Meta (Cloudflare R2 / S3 Presigned Bridge)
+
+#### Key Technical Context
 - Meta Graph API strictly requires a public HTTP/HTTPS URL (`video_url` or `image_url`) fetched by user-agent `facebookexternalhit/1.1`.
 - Local paths and localhost are rejected; tunnels occasionally suffer from timeout errors (`-2 / 2207003`).
 - **Verdict:** Cloudflare R2 has **zero egress fees**, provides a 10GB free tier, and offloads heavy media uploads from the self-hosted Node.js server.
 - Presigned PUT URL: 15-minute validity for browser uploads.
 - Presigned GET URL: 24-hour validity to match Meta's container expiration window.
 
-### Phase 1 Execution Blueprint
+#### Execution Tasks:
 - [ ] **1.1. Storage Adapter:** Create `src/media/storage.js` using `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`.
 - [ ] **1.2. Upload URL Route:** Implement `POST /api/media/presign-upload` returning `{ uploadUrl, objectKey }`.
 - [ ] **1.3. Ingestion Bridge:** In `src/platforms/index.js` (for Instagram and Facebook), if S3/R2 is configured, pass the presigned GET URL to Meta’s `/media` container creation.
@@ -38,15 +53,15 @@ This execution plan documents the technical findings, architectural trade-offs, 
 
 ---
 
-## 📌 Pillar 2: Post Performance Analytics & Sync Daemon
+### 📌 Pillar 2: Post Performance Analytics & Sync Daemon
 
-### Key Technical Findings
+#### Key Technical Context
 - **The X API Cost Trap:** X API charges ~$0.005 per read operation. Continuous polling of 1,000 tweets hourly burns **$3,600/month**.
 - **The Dual-Snapshot Rule:** Polling metrics *strictly twice* (at **T+24h** for viral velocity and **T+7d** for cumulative reach) caps X read costs at **exactly $0.01 per post over its lifetime**.
 - **Instagram Rate Limit Formula:** Calls in 24h = $4800 \times \text{Number of Impressions}$, capped at 200 calls/user/hour.
 - **Database Concurrency:** In `node:sqlite`, bulk snapshot writes must use `BEGIN IMMEDIATE` to acquire write locks upfront without throwing `SQLITE_BUSY`.
 
-### Phase 2 Execution Blueprint
+#### Execution Tasks:
 - [ ] **2.1. Snapshot Table:** Add `post_metrics_snapshots` in SQLite:
   ```sql
   CREATE TABLE IF NOT EXISTS post_metrics_snapshots (
@@ -74,38 +89,13 @@ This execution plan documents the technical findings, architectural trade-offs, 
 
 ---
 
-## 📌 Pillar 3: Smart Recurring Queue Slots ("Buffer-Style Scheduling")
+### 📌 Pillar 4: Task-Based Actionable Inbox
 
-### Key Technical Findings
-- Pre-generating future slots into SQL tables is brittle; editing a slot requires cascading deletes.
-- **Verdict:** Dynamic calculation on post insertion using Node's native `Intl.DateTimeFormat` guarantees 100% Daylight Saving Time (DST) accuracy with zero external dependencies.
-
-### Phase 3 Execution Blueprint
-- [ ] **3.1. Schedule Rules Schema:**
-  ```sql
-  CREATE TABLE IF NOT EXISTS queue_rules (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      client_id INTEGER NOT NULL,
-      timezone TEXT NOT NULL DEFAULT 'UTC', -- e.g. 'America/New_York'
-      iso_weekday INTEGER NOT NULL, -- 1 (Monday) to 7 (Sunday)
-      local_time TEXT NOT NULL, -- '09:00'
-      FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
-  );
-  ```
-- [ ] **3.2. Next-Available Slot Algorithm:**
-  - Given a client's timezone and weekly rules, calculate the next chronological UTC epoch that is not currently occupied by a pending post in `posts`.
-- [ ] **3.3. Composer Integration:** Add **"Add to Queue"** button alongside "Publish Now" and "Schedule".
-- [ ] **3.4. Settings UI:** Provide a visual weekly grid in **Workspaces & APIs** to add/remove posting slots (e.g., Mon/Wed/Fri 10:00 AM).
-
----
-
-## 📌 Pillar 4: Task-Based Actionable Inbox
-
-### Key Technical Findings
+#### Key Technical Context
 - Full bi-directional inboxes (syncing comment deletions and deep nested trees) have a **2/10 feasibility score** due to LinkedIn Partner gates and Meta’s 20-day video review requirement.
 - **Verdict:** An **Actionable Task Queue (8/10 feasibility)** logs inbound comments as discrete items. Users reply once, and the item is dismissed (`is_replied = 1`).
 
-### Phase 4 Execution Blueprint
+#### Execution Tasks:
 - [ ] **4.1. Task Table:**
   ```sql
   CREATE TABLE IF NOT EXISTS engagement_tasks (
@@ -121,37 +111,27 @@ This execution plan documents the technical findings, architectural trade-offs, 
       reply_text TEXT
   );
   ```
-- [ ] **4.2. Inbound Webhook / Poller:** Receive Meta webhooks or poll YouTube `commentThreads.list`.
+- [ ] **4.2. Inbound Webhook / Poller:** Receive Meta webhooks with `X-Hub-Signature-256` verification, or poll YouTube `commentThreads.list`.
 - [ ] **4.3. Unified Reply Drawer:** Dashboard tab listing unanswered comments with a quick-reply input that dispatches through the existing platform adapters.
 
 ---
 
-## 📌 Pillar 5: Multi-Tenant Team Workflows & Client Review Gates
+### 📌 Pillar 6: Process Isolation & Worker Threads for FFmpeg Transcoding
 
-### Key Technical Findings
-- Forcing agency clients to create accounts and log into third-party dashboards introduces high friction, delaying post approvals.
-- **Verdict:** Single-use **HMAC-SHA256 Tokenized Magic Links** with 72-hour validity and `crypto.timingSafeEqual` verification allow clients to approve post batches via mobile in one tap.
+#### Key Technical Context
+- When a user uploads a 4K/FHD video and converts it to 9:16 vertical with blur padding, FFmpeg consumes 100% of available CPU cores.
+- Running FFmpeg directly in the main server process can momentarily delay HTTP responses or postpone the 60-second scheduler interval.
 
-### Phase 5 Execution Blueprint
-- [ ] **5.1. Workflow State Machine:**
-  - Add `workflow_status` to `posts` table: `'draft'` ➔ `'pending_approval'` ➔ `'approved'` ➔ `'scheduled'`.
-  - Add `approval_token_hash TEXT` and `token_expires_at INTEGER`.
-- [ ] **5.2. Magic Link Generator:**
-  - Generate 32 bytes of cryptographic entropy (`crypto.randomBytes(32)`).
-  - Store HMAC-SHA256 hash in SQLite.
-  - Send link to client via Email, Slack, or copy-to-clipboard:
-    `https://yourdomain.com/review/:postId?token={rawToken}`
-- [ ] **5.3. Standalone Review Page:**
-  - Lightweight, branded page displaying post mockups and copy.
-  - One-click buttons: **"Approve & Schedule"** or **"Request Revisions"**.
-  - Upon approval, verify token using `crypto.timingSafeEqual()`, update post status to `'scheduled'`, and immediately nullify the hash (single-use nonce).
+#### Execution Tasks:
+- [ ] **6.1. Worker Thread Spawning:** Wrap `transcodeToVertical()` using Node’s `node:worker_threads` or dedicated child process fork with CPU affinity settings (`-threads 2`).
+- [ ] **6.2. Background Job Queue:** Return an immediate HTTP 202 Accepted status with a `jobId` and query `/api/media/jobs/:id` for progress updates.
 
 ---
 
-## 🗂️ Verification Checklist When Ready to Implement
+### 📌 Pillar 7: Open-Source Governance & CI/CD Pipeline
 
-When you are ready to begin Phase A:
-1. Verify S3/R2 credentials in `.env`.
-2. Run database migration adding `queue_rules` and `post_metrics_snapshots`.
-3. Test dynamic slot calculation across Daylight Saving boundaries.
-4. Test HMAC-SHA256 timing-attack resistance with `crypto.timingSafeEqual`.
+#### Execution Tasks:
+- [ ] **7.1. LICENSE File:** Add formal `LICENSE` file (AGPLv3 to prevent closed commercial forks, or MIT for permissive adoption).
+- [ ] **7.2. SECURITY.md:** Outline vulnerability reporting policy and encrypted vault guidelines.
+- [ ] **7.3. CONTRIBUTING.md:** Contribution guide detailing Node 24 requirement, `node:sqlite` testing, and pull request conventions.
+- [ ] **7.4. GitHub Actions CI:** Automated workflow running `npm test`, linter checks, and syntax validation on every push.

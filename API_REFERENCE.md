@@ -390,4 +390,124 @@ Content-Type: application/json
   }
 }
 ```
+
 Credentials are encrypted at rest with AES-256-GCM prior to storage.
+
+---
+
+## 6. Recurring Queue Rules & Auto-Slot Endpoints
+
+### 6.1. List Client Weekly Recurring Slots
+
+```http
+GET /api/clients/:id/queue-rules
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "rules": [
+    {
+      "id": 1,
+      "client_id": 1,
+      "timezone": "America/New_York",
+      "iso_weekday": 1,
+      "local_time": "09:30",
+      "created_at": "2026-10-21T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+### 6.2. Add Weekly Recurring Slot
+
+```http
+POST /api/clients/:id/queue-rules
+Content-Type: application/json
+
+{
+  "timezone": "America/New_York",
+  "iso_weekday": 3,
+  "local_time": "14:00"
+}
+```
+
+### 6.3. Delete Recurring Slot
+
+```http
+DELETE /api/queue-rules/:id
+```
+
+### 6.4. Calculate Next Available Queue Slot
+
+```http
+GET /api/clients/:id/next-slot?tz=America/New_York
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "nextSlotIso": "2026-10-26T13:30:00.000Z",
+  "timezone": "America/New_York"
+}
+```
+
+---
+
+## 7. Client Approval Workflow & Magic Link Endpoints
+
+### 7.1. Generate Single-Use Magic Approval Link
+
+```http
+POST /api/posts/:id/request-approval
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "magicLink": "http://localhost:3000/review/42?token=7f9b8c2d...",
+  "expiresAt": 1729769200000
+}
+```
+
+### 7.2. Client Standalone Review Portal
+
+```http
+GET /review/:id?token={rawToken}
+```
+Serves an accessible, mobile-responsive review interface for external clients.
+
+### 7.3. Client Approve Post Action
+
+```http
+POST /api/review/:id/approve
+Content-Type: application/json
+
+{
+  "token": "7f9b8c2d..."
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "postId": 42,
+  "status": "scheduled"
+}
+```
+
+### 7.4. Client Reject Post Action
+
+```http
+POST /api/review/:id/reject
+Content-Type: application/json
+
+{
+  "token": "7f9b8c2d...",
+  "notes": "Please update the graphic to version 2"
+}
+```

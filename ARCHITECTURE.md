@@ -172,7 +172,33 @@ The interactive calendar (`public/app.js` & `public/styles.css`) is implemented 
 
 ---
 
-## 7. Buffer vs. SocialPulse Architectural Matrix
+## 7. Dynamic Recurring Queue Slots Architecture
+
+Buffer's marquee feature is abstract weekly slot scheduling (e.g. *Mon/Wed/Fri 09:30*). Rather than maintaining brittle, pre-generated future slot tables that break upon schedule edits or Daylight Saving Time shifts, SocialPulse uses **Dynamic Next-Slot Projection**:
+
+### 7.1. Pure Node.js DST-Aware Algorithm
+- Stored rules: `queue_rules` table (`client_id`, `timezone`, `iso_weekday`, `local_time`).
+- Upon user action ("Add to Queue"):
+  1. The engine queries `queue_rules` and existing occupied slots in `posts`.
+  2. Iterates across candidate days up to 28 days forward.
+  3. Uses Node’s native `Intl.DateTimeFormat` with `timeZone` to extract exact regional offsets, correcting for political DST boundaries.
+  4. Returns the earliest unoccupied future UTC epoch. Zero external date libraries required.
+
+---
+
+## 8. Client Review Gates & Cryptographic Nonce Security
+
+For agency workflows, SocialPulse decouples client approvals from user authentication:
+
+### 8.1. Single-Use HMAC-SHA256 Token Model
+1. **Entropy Generation:** Generates 32 bytes of secure entropy (`crypto.randomBytes(32)`).
+2. **Hash Persistence:** Derives HMAC-SHA256 using `ENCRYPTION_SECRET` and stores only the resulting hash in `posts.approval_token_hash` alongside a 72-hour `token_expires_at` timestamp.
+3. **Timing-Safe Verification:** Upon client approval request, validates the raw token against the stored hash using `crypto.timingSafeEqual()` to eliminate side-channel timing attacks.
+4. **Nonce Nullification:** Upon approval, sets `workflow_state = 'APPROVED'` and immediately nullifies `approval_token_hash`, preventing link reuse.
+
+---
+
+## 9. Buffer vs. SocialPulse Architectural Matrix
 
 | Dimension | Buffer (Commercial SaaS) | SocialPulse Studio (This Project) |
 | :--- | :--- | :--- |
@@ -182,6 +208,8 @@ The interactive calendar (`public/app.js` & `public/styles.css`) is implemented 
 | **Media Transcoding** | Cloud transcoding worker cluster | **Embedded FFmpeg / FFprobe Engine** |
 | **Data Privacy** | Stored on third-party SaaS servers | **100% On-Premise; AES-256-GCM encrypted** |
 | **Calendar Scheduling** | Hosted interactive calendar | **Native HTML5 Drag-and-Drop Calendar** |
+| **Queue Slots Architecture** | Proprietary slot tables | **Dynamic `Intl` DST-Aware Projection** |
+| **Client Approvals** | Paid client user seat required | **Single-Use HMAC-SHA256 Magic Links** |
 | **Platform Compiler** | Basic text length limit check | **Grapheme Segmenter + Weighted URL Math** |
 | **Automation Interop** | Webhooks / Zapier / Make | **Native API + exportable n8n workflow JSON** |
 

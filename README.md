@@ -26,10 +26,16 @@ Unlike traditional social media schedulers that act as "dumb pipes" (stripping r
    - **Automatic Inspection:** Real-time aspect ratio, resolution, duration, and codec probing.
    - **Smart Vertical Conversion:** One-click conversion of 16:9 horizontal videos to 9:16 vertical videos with blurred background padding for YouTube Shorts and Instagram Reels.
    - **Poster Frame Generator:** Automatic high-resolution thumbnail extraction.
-5. **Zero-Docker, Native Embedded Operations:**
+5. **Smart Recurring Queue Slots ("Buffer-Style Scheduling"):**
+   - Define weekly recurring schedules per client (e.g. *Mon 09:30 AM, Wed 14:00, Fri 10:00*).
+   - "Add to Queue" dynamically projects future time slots using pure Node.js native `Intl.DateTimeFormat` with automatic Daylight Saving Time (DST) awareness.
+6. **Client Review Gates & Passwordless Magic Links:**
+   - Agency-grade review workflow: junior creators draft content, and external clients approve/reject with one tap on mobile.
+   - Secured with HMAC-SHA256, 72-hour expiration, and single-use nonce nullification to prevent replay attacks.
+7. **Zero-Docker, Native Embedded Operations:**
    - Powered by Node.js 24 and embedded **`node:sqlite`** running in enterprise **WAL (Write-Ahead Logging)** mode with 5-second busy timeout and atomic worker lease locks.
    - All state, queues, and AES-256-GCM encrypted credentials live in a single local `posts.sqlite` file.
-6. **Client Workspace Isolation & Vault:**
+8. **Client Workspace Isolation & Vault:**
    - Multi-tenant client workspace partitioning with encrypted credential storage.
 
 ---
@@ -136,6 +142,7 @@ Open your browser at:
 │       └── linkedin.js   # LinkedIn REST Posts API, PDF carousels & comment edge
 ├── ARCHITECTURE.md       # Deep-dive architectural review & failure modes
 ├── API_REFERENCE.md      # Complete REST API documentation & payload schemas
+├── CLIENT_REQUIREMENTS.md # Client onboarding questionnaire & intake form
 ├── DEPLOYMENT_GUIDE.md   # Production deployment & API developer portal setup
 ├── IMPROVEMENTS_ROADMAP.md # Enterprise V2 execution blueprints & technical findings
 ├── plan.md               # Phased implementation plan & completion status
@@ -149,6 +156,7 @@ Open your browser at:
 
 - **[Architecture Review & System Design](ARCHITECTURE.md)**: Concurrency models, optimistic locking, security posture, and failure modes.
 - **[REST API Reference](API_REFERENCE.md)**: Full endpoint list, query parameters, request/response JSON schemas.
+- **[Client Onboarding Checklist](CLIENT_REQUIREMENTS.md)**: Ready-to-send intake questionnaire for brand permissions and API credentials.
 - **[Production & Developer Setup Guide](DEPLOYMENT_GUIDE.md)**: How to configure developer apps for Google, Twitter, LinkedIn, and Meta, plus VPS deployment.
 - **[Enterprise Improvements Roadmap (V2)](IMPROVEMENTS_ROADMAP.md)**: Technical findings and execution blueprints for Cloudflare R2, Dual-Snapshot Analytics, Dynamic Queue Slots, and Client Magic Links.
 - **[Engineering Implementation Plan](plan.md)**: Complete tracking of all 6 architectural phases.
@@ -163,6 +171,8 @@ Open your browser at:
 | **Data Privacy** | Cloud SaaS (Third-party servers) | **100% On-Premise & Encrypted** |
 | **Infrastructure** | Proprietary Cloud | **Native Node.js 24 + Embedded SQLite** |
 | **Link Anti-Penalty (First Comment)** | Paid Add-on (limited channels) | **Native Automated Decoupling (X, LinkedIn, IG, YT)** |
+| **Buffer-Style Recurring Queuing** | Proprietary queue slots | **Dynamic `Intl` DST-aware Queue Slots** |
+| **Client Approval Workflow** | Requires client paid account | **Single-Use HMAC-SHA256 Magic Links** |
 | **YouTube Reach Knobs** | Basic Title/Desc only | **Categories, Custom thumbs, COPPA, AI flags, Notify shield** |
 | **X Heavy Ranker Knobs** | Basic text | **Alt-text injection, 150x reply settings locked** |
 | **LinkedIn Engagement Knobs** | Basic post | **PDF carousels, Disable-Reshare comment trigger** |
