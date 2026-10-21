@@ -424,7 +424,12 @@
               <div class="schedule-cluster">
                 <div class="timing-segmented">
                   <label><input type="radio" name="timing" value="now" checked> Publish Now</label>
-                  <label><input type="radio" name="timing" value="scheduled"> Schedule</label>
+                  <label><input type="radio" name="timing" value="queue"> Add to Queue</label>
+                  <label><input type="radio" name="timing" value="scheduled"> Custom Schedule</label>
+                </div>
+                <div id="queue-slot-badge" style="display: none; font-size: 11.5px; color: var(--status-green); align-items: center; gap: 5px;">
+                  <span>⚡ Next Available Slot:</span>
+                  <span id="queue-slot-time-text" style="font-family: var(--font-mono); font-weight: 500;">Calculating...</span>
                 </div>
                 <div id="schedule-inputs" class="schedule-inputs" style="display: none;">
                   <input type="date" id="schedule_date">
@@ -819,6 +824,51 @@
           </div>
 
           <div id="clients-list-container" style="display: grid; gap: 12px;"></div>
+
+          <!-- Weekly Recurring Schedule Manager (Buffer-Style Slots) -->
+          <div style="margin-top: 24px; background: var(--bg-base); border: 1px solid var(--border-default); border-radius: 8px; padding: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <div>
+                <span class="panel-title" style="font-size: 14px;">Weekly Posting Schedule (Recurring Queue Slots)</span>
+                <span class="panel-subtitle" style="margin-left: 6px;">Used when choosing 'Add to Queue'</span>
+              </div>
+              <button class="btn btn-secondary" id="btn-add-queue-slot" style="font-size: 11px; padding: 4px 10px;">+ Add Slot</button>
+            </div>
+
+            <!-- Add Slot Form -->
+            <div id="add-queue-slot-form" style="display: none; background: var(--bg-panel); border: 1px solid var(--border-focus); border-radius: 6px; padding: 12px; margin-bottom: 14px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: center;">
+                <div>
+                  <label class="form-label">Day of Week</label>
+                  <select id="new-slot-weekday" style="margin-top: 4px;">
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                    <option value="7">Sunday</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">Local Time (24h)</label>
+                  <input type="time" id="new-slot-time" value="09:30" style="margin-top: 4px;">
+                </div>
+                <div>
+                  <label class="form-label">Client Timezone</label>
+                  <input type="text" id="new-slot-tz" value="UTC" placeholder="e.g. America/New_York" style="margin-top: 4px;">
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 18px;">
+                  <button class="btn btn-primary" id="btn-save-slot" style="padding: 6px 12px; font-size: 12px;">Save</button>
+                  <button class="btn btn-ghost" id="btn-cancel-slot" style="padding: 6px 10px; font-size: 12px;">Cancel</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="queue-slots-list" style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <span style="font-size: 12px; color: var(--text-muted);">No recurring slots defined yet. Posts added to queue will default to 09:00 AM.</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -852,6 +902,7 @@
         <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 14px;">
           <button class="btn btn-danger" id="cal-modal-btn-delete" style="font-size: 12px; padding: 6px 12px;">Delete</button>
           <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" id="cal-modal-btn-magic-link" style="font-size: 12px; color: var(--status-amber);">⚡ Magic Approval Link</button>
             <button class="btn btn-secondary" id="cal-modal-btn-edit" style="font-size: 12px;">Edit in Composer</button>
             <button class="btn btn-primary" id="cal-modal-btn-done" style="font-size: 12px;">Done</button>
           </div>

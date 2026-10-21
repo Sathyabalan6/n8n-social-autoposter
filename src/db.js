@@ -75,7 +75,20 @@ db.exec(`
     linkedin_disable_reshare INTEGER DEFAULT 0,
     linkedin_doc_path TEXT,
     instagram_audio_name TEXT,
-    instagram_is_trial INTEGER DEFAULT 0
+    instagram_is_trial INTEGER DEFAULT 0,
+    workflow_state TEXT DEFAULT 'APPROVED',
+    approval_token_hash TEXT,
+    token_expires_at INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS queue_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    iso_weekday INTEGER NOT NULL CHECK(iso_weekday BETWEEN 1 AND 7),
+    local_time TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS settings (
@@ -102,7 +115,10 @@ const migrations = [
   'ALTER TABLE posts ADD COLUMN linkedin_disable_reshare INTEGER DEFAULT 0;',
   'ALTER TABLE posts ADD COLUMN linkedin_doc_path TEXT;',
   'ALTER TABLE posts ADD COLUMN instagram_audio_name TEXT;',
-  'ALTER TABLE posts ADD COLUMN instagram_is_trial INTEGER DEFAULT 0;'
+  'ALTER TABLE posts ADD COLUMN instagram_is_trial INTEGER DEFAULT 0;',
+  "ALTER TABLE posts ADD COLUMN workflow_state TEXT DEFAULT 'APPROVED';",
+  'ALTER TABLE posts ADD COLUMN approval_token_hash TEXT;',
+  'ALTER TABLE posts ADD COLUMN token_expires_at INTEGER;'
 ];
 
 for (const sql of migrations) {
@@ -197,6 +213,16 @@ const stmtDeleteAccount = db.prepare(`DELETE FROM social_accounts WHERE id = ?`)
 
 const stmtGetSetting = db.prepare(`SELECT value, encrypted FROM settings WHERE key = ?`);
 const stmtSetSetting = db.prepare(`INSERT INTO settings (key, value, encrypted) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, encrypted = excluded.encrypted`);
+
+// Queue Rules Statements
+const stmtGetQueueRules = db.prepare(`SELECT * FROM queue_rules WHERE client_id = ? ORDER BY iso_weekday ASC, local_time ASC`);
+const stmtInsertQueueRule = db.prepare(`INSERT INTO queue_rules (client_id, timezone, iso_weekday, local_time, created_at) VALUES (?, ?, ?, ?, ?)`);
+const stmtDeleteQueueRule = db.prepare(`DELETE FROM queue_rules WHERE id = ?`);
+const stmtGetPendingScheduledPosts = db.prepare(`SELECT id, scheduled_at FROM posts WHERE client_id = ? AND status = 'scheduled' ORDER BY scheduled_at ASC`);
+
+// Approval Workflow Statements
+const stmtSetApprovalToken = db.prepare(`UPDATE posts SET approval_token_hash = ?, token_expires_at = ?, workflow_state = ?, updated_at = ? WHERE id = ?`);
+const stmtSetWorkflowState = db.prepare(`UPDATE posts SET workflow_state = ?, approval_token_hash = NULL, updated_at = ? WHERE id = ?`);
 
 module.exports = {
   db,
@@ -436,5 +462,25 @@ module.exports = {
     } else {
       stmtSetSetting.run(key, strVal, 0);
     }
+  },
+  // Queue Rules API
+  getQueueRules: (clientId) => stmtGetQueueRules.all(clientId),
+  createQueueRule: (clientId, timezone, isoWeekday, localTime) => {
+    const now = new Date().toISOString();
+    const res = stmtInsertQueueRule.run(clientId, timezone || 'UTC', isoWeekday, localTime, now);
+    return { id: res.lastInsertRowid, client_id: clientId, timezone, iso_weekday: isoWeekday, local_time: localTime, created_at: now };
+  },
+  deleteQueueRule: (id) => stmtDeleteQueueRule.run(id),
+  getPendingScheduledPosts: (clientId) => stmtGetPendingScheduledPosts.all(clientId),
+  // Approval Workflow API
+  setApprovalToken: (postId, tokenHash, expiresAt) => {
+    const now = new Date().toISOString();
+    stmtSetApprovalToken.run(tokenHash, expiresAt, 'PENDING_APPROVAL', now, postId);
+    return true;
+  },
+  setWorkflowState: (postId, workflowState) => {
+    const now = new Date().toISOString();
+    stmtSetWorkflowState.run(workflowState, now, postId);
+    return true;
   }
 };

@@ -58,7 +58,29 @@ function decrypt(ciphertextBase64) {
   }
 }
 
+function generateApprovalToken() {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const secret = process.env.ENCRYPTION_SECRET || 'socialpulse-approval-secret-fallback';
+  const tokenHash = crypto.createHmac('sha256', secret).update(rawToken).digest('hex');
+  const expiresAt = Date.now() + 72 * 60 * 60 * 1000; // 72 hours
+  return { rawToken, tokenHash, expiresAt };
+}
+
+function validateApprovalToken(rawToken, storedHash, expiresAt) {
+  if (!rawToken || !storedHash) return false;
+  if (expiresAt && Date.now() > expiresAt) return false;
+  const secret = process.env.ENCRYPTION_SECRET || 'socialpulse-approval-secret-fallback';
+  const computedHash = crypto.createHmac('sha256', secret).update(rawToken).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(computedHash, 'hex'), Buffer.from(storedHash, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
   encrypt,
-  decrypt
+  decrypt,
+  generateApprovalToken,
+  validateApprovalToken
 };

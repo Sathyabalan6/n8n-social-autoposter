@@ -5,10 +5,11 @@ const express = require('express');
 const multer = require('multer');
 
 const db = require('./db');
-const { compilePost, YOUTUBE_CATEGORIES } = require('./compiler');
+const { compilePost, YOUTUBE_CATEGORIES, calculateNextAvailableSlot } = require('./compiler');
 const { dispatchPost } = require('./platforms');
 const { getAuthUrl, handleAuthCallback, getStoredTokens } = require('./platforms/youtube');
 const { inspectMedia, transcodeToVertical, extractThumbnail } = require('./media/transcoder');
+const { generateApprovalToken, validateApprovalToken } = require('./crypto');
 const { startScheduler } = require('./scheduler');
 
 const app = express();
@@ -537,6 +538,230 @@ app.delete('/api/posts/:id', (req, res) => {
   try {
     db.deletePost(req.params.id);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- QUEUE RULES & SMART BUFFER-STYLE SLOTS ---
+app.get('/api/clients/:id/queue-rules', (req, res) => {
+  try {
+    const rules = db.getQueueRules(req.params.id);
+    res.json({ success: true, rules });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/clients/:id/queue-rules', (req, res) => {
+  try {
+    const clientId = parseInt(req.params.id, 10);
+    const { timezone, iso_weekday, local_time } = req.body;
+    if (!iso_weekday || !local_time) {
+      return res.status(400).json({ success: false, error: 'iso_weekday (1-7) and local_time (HH:mm) are required' });
+    }
+    const rule = db.createQueueRule(clientId, timezone || 'UTC', parseInt(iso_weekday, 10), String(local_time).trim());
+    res.json({ success: true, rule });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/queue-rules/:id', (req, res) => {
+  try {
+    db.deleteQueueRule(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/clients/:id/next-slot', (req, res) => {
+  try {
+    const clientId = parseInt(req.params.id, 10);
+    const rules = db.getQueueRules(clientId);
+    const pendingPosts = db.getPendingScheduledPosts(clientId);
+    const occupiedSlots = pendingPosts.map((p) => p.scheduled_at);
+    const clientTz = rules[0]?.timezone || req.query.tz || 'UTC';
+
+    const nextSlotIso = calculateNextAvailableSlot(rules, occupiedSlots, clientTz, new Date());
+    res.json({ success: true, nextSlotIso, timezone: clientTz });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- CLIENT REVIEW GATES & SINGLE-USE MAGIC LINKS ---
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+app.post('/api/posts/:id/request-approval', (req, res) => {
+  try {
+    const postId = parseInt(req.params.id, 10);
+    const post = db.getPostById(postId);
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    const { rawToken, tokenHash, expiresAt } = generateApprovalToken();
+    db.setApprovalToken(postId, tokenHash, expiresAt);
+
+    const baseUrl = process.env.BASE_URL || `http://${req.headers.host || 'localhost:3000'}`;
+    const magicLink = `${baseUrl}/review/${postId}?token=${rawToken}`;
+
+    res.json({ success: true, magicLink, expiresAt });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/review/:id', (req, res) => {
+  const postId = parseInt(req.params.id, 10);
+  const token = req.query.token;
+  const post = db.getPostById(postId);
+
+  if (!post) {
+    return res.status(404).send('<h1>Post Not Found</h1><p>This draft does not exist or has been removed.</p>');
+  }
+
+  const isValid = validateApprovalToken(token, post.approval_token_hash, post.token_expires_at);
+
+  let badgeClass = 'badge-expired';
+  let badgeText = 'Link Expired';
+  if (post.workflow_state === 'APPROVED') {
+    badgeClass = 'badge-approved';
+    badgeText = 'Approved';
+  } else if (isValid) {
+    badgeClass = 'badge-pending';
+    badgeText = 'Pending Review';
+  }
+
+  let footerMsg = 'This review link is invalid or has expired.';
+  if (post.workflow_state === 'APPROVED') {
+    footerMsg = '✓ This post has been approved and scheduled.';
+  }
+
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Post Review — Post #${post.id}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #09090b; color: #fafafa; margin: 0; padding: 20px; display: flex; justify-content: center; }
+    .card { background: #111113; border: 1px solid #27272a; border-radius: 8px; max-width: 520px; width: 100%; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    .title { font-size: 16px; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+    .badge-pending { background: #eab308; color: #000; }
+    .badge-approved { background: #22c55e; color: #000; }
+    .badge-expired { background: #ef4444; color: #fff; }
+    .content-box { background: #18181b; border: 1px solid #222226; border-radius: 6px; padding: 14px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin: 16px 0; }
+    .meta-row { font-size: 12px; color: #a1a1aa; margin-bottom: 16px; }
+    .btn-group { display: flex; gap: 10px; margin-top: 20px; }
+    .btn { flex: 1; padding: 12px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; text-align: center; }
+    .btn-approve { background: #22c55e; color: #000; }
+    .btn-reject { background: #27272a; color: #fafafa; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">
+      <span>Review Draft Post #${post.id}</span>
+      <span class="badge ${badgeClass}">${badgeText}</span>
+    </div>
+    <div class="meta-row">
+      Scheduled for: <strong>${new Date(post.scheduled_at).toLocaleString()}</strong> • Channels: <strong>${(post.platforms || []).join(', ')}</strong>
+    </div>
+    <div class="content-box">${escapeHtml(post.master_text)}</div>
+    ${post.first_comment ? '<div style="font-size: 12px; color: #22c55e; margin-bottom: 12px;"><strong>First Comment (Outbound Link):</strong> ' + escapeHtml(post.first_comment) + '</div>' : ''}
+    ${post.media_filename ? '<div style="font-size: 12px; color: #a1a1aa; margin-bottom: 14px;">📎 Attachment: ' + escapeHtml(post.media_filename) + '</div>' : ''}
+    
+    ${isValid && post.workflow_state !== 'APPROVED' ? `
+      <div class="btn-group">
+        <button class="btn btn-approve" id="btn-approve">Approve & Schedule</button>
+        <button class="btn btn-reject" id="btn-reject">Request Revisions</button>
+      </div>
+      <script>
+        document.getElementById('btn-approve').onclick = async () => {
+          const res = await fetch('/api/review/${post.id}/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: '${token}' })
+          });
+          const data = await res.json();
+          if (data.success) {
+            alert('Post approved successfully!');
+            window.location.reload();
+          } else {
+            alert('Approval failed: ' + data.error);
+          }
+        };
+        document.getElementById('btn-reject').onclick = async () => {
+          const notes = prompt('Enter revision notes for the creator:');
+          if (!notes) return;
+          const res = await fetch('/api/review/${post.id}/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: '${token}', notes })
+          });
+          const data = await res.json();
+          if (data.success) {
+            alert('Feedback sent.');
+            window.location.reload();
+          }
+        };
+      </script>
+    ` : `
+      <div style="text-align: center; color: #a1a1aa; font-size: 13px; margin-top: 20px;">
+        ${footerMsg}
+      </div>
+    `}
+  </div>
+</body>
+</html>
+  `);
+});
+
+app.post('/api/review/:id/approve', (req, res) => {
+  try {
+    const postId = parseInt(req.params.id, 10);
+    const { token } = req.body;
+    const post = db.getPostById(postId);
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    const isValid = validateApprovalToken(token, post.approval_token_hash, post.token_expires_at);
+    if (!isValid) {
+      return res.status(403).json({ success: false, error: 'Invalid or expired approval token' });
+    }
+
+    db.setWorkflowState(postId, 'APPROVED');
+    db.updatePostSchedule(postId, post.scheduled_at, 'scheduled');
+
+    res.json({ success: true, postId, status: 'scheduled' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/review/:id/reject', (req, res) => {
+  try {
+    const postId = parseInt(req.params.id, 10);
+    const { token, notes } = req.body;
+    const post = db.getPostById(postId);
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    const isValid = validateApprovalToken(token, post.approval_token_hash, post.token_expires_at);
+    if (!isValid) {
+      return res.status(403).json({ success: false, error: 'Invalid or expired approval token' });
+    }
+
+    db.setWorkflowState(postId, 'REJECTED');
+    res.json({ success: true, postId, status: 'rejected', notes });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

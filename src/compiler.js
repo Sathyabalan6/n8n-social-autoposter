@@ -303,11 +303,89 @@ function compilePost(input) {
   };
 }
 
+function getTzOffsetMs(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(date);
+  const p = {};
+  for (const part of parts) {
+    p[part.type] = part.value;
+  }
+  const asUtc = Date.UTC(
+    parseInt(p.year, 10),
+    parseInt(p.month, 10) - 1,
+    parseInt(p.day, 10),
+    p.hour === '24' ? 0 : parseInt(p.hour, 10),
+    parseInt(p.minute, 10),
+    parseInt(p.second, 10)
+  );
+  return asUtc - date.getTime();
+}
+
+function createUtcFromTz(year, month, day, hour, minute, second, timeZone) {
+  const initialUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const offsetMs = getTzOffsetMs(new Date(initialUtc), timeZone);
+  const correctedUtc = initialUtc - offsetMs;
+  const refinedOffsetMs = getTzOffsetMs(new Date(correctedUtc), timeZone);
+  return new Date(initialUtc - refinedOffsetMs);
+}
+
+function calculateNextAvailableSlot(queueRules, occupiedIsoSlots = [], targetTimezone = 'UTC', now = new Date()) {
+  if (!queueRules || !queueRules.length) {
+    const fallback = new Date(now.getTime() + 86400000);
+    fallback.setMinutes(0, 0, 0);
+    fallback.setHours(9);
+    return fallback.toISOString();
+  }
+
+  for (let dayOffset = 0; dayOffset <= 28; dayOffset++) {
+    const candidateDate = new Date(now.getTime() + dayOffset * 86400000);
+    const tzDateStr = candidateDate.toLocaleDateString('en-CA', { timeZone: targetTimezone });
+    const [tzYear, tzMonth, tzDay] = tzDateStr.split('-').map(Number);
+    const tzDateObj = new Date(Date.UTC(tzYear, tzMonth - 1, tzDay));
+    const dayOfWeek = tzDateObj.getUTCDay();
+    const isoWeekday = dayOfWeek === 0 ? 7 : dayOfWeek; // 1 (Mon) to 7 (Sun)
+
+    const dayRules = queueRules.filter((r) => r.iso_weekday === isoWeekday);
+
+    for (const rule of dayRules) {
+      const [hours, minutes] = rule.local_time.split(':').map(Number);
+      const slotDate = createUtcFromTz(tzYear, tzMonth, tzDay, hours, minutes, 0, targetTimezone);
+      const slotUtcEpoch = slotDate.getTime();
+
+      // Must be strictly in the future (> now + 2 minutes)
+      if (slotUtcEpoch > now.getTime() + 120000) {
+        const slotIso = slotDate.toISOString();
+        const isOccupied = occupiedIsoSlots.some((occ) => {
+          const occEpoch = new Date(occ).getTime();
+          return Math.abs(occEpoch - slotUtcEpoch) < 60000;
+        });
+
+        if (!isOccupied) {
+          return slotIso;
+        }
+      }
+    }
+  }
+
+  return new Date(now.getTime() + 86400000 * 28).toISOString();
+}
+
 module.exports = {
   compilePost,
   countGraphemes,
   countUtf8Bytes,
   calculateWeightedXLength,
   resolveYouTubeCategory,
-  YOUTUBE_CATEGORIES
+  YOUTUBE_CATEGORIES,
+  createUtcFromTz,
+  calculateNextAvailableSlot
 };

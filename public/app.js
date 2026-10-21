@@ -92,9 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
   setupLiveSync();
   setupComposerActions();
   setupClientsManager();
+  setupQueueRulesUI();
   setupCalendar();
   fetchClients();
   fetchQueue();
+  fetchQueueRules(state.activeClientId);
 });
 
 // --- NAVIGATION ---
@@ -112,7 +114,10 @@ function setupNavigation() {
 
       if (targetId === 'tab-calendar') renderCalendar();
       if (targetId === 'tab-queue') fetchQueue();
-      if (targetId === 'tab-clients') fetchClients();
+      if (targetId === 'tab-clients') {
+        fetchClients();
+        fetchQueueRules(state.activeClientId);
+      }
     });
   });
 
@@ -122,9 +127,33 @@ function setupNavigation() {
     });
   });
 
+  const queueBadge = document.getElementById('queue-slot-badge');
+  const queueTimeText = document.getElementById('queue-slot-time-text');
+
   el.timingRadios.forEach((radio) => {
-    radio.addEventListener('change', () => {
-      if (radio.value === 'scheduled') {
+    radio.addEventListener('change', async () => {
+      if (radio.value === 'queue') {
+        el.scheduleInputs.style.display = 'none';
+        if (queueBadge) queueBadge.style.display = 'inline-flex';
+        el.btnPublishFinal.textContent = 'Add to Queue';
+        if (queueTimeText) {
+          queueTimeText.textContent = 'Calculating next slot...';
+          try {
+            const res = await fetch(`/api/clients/${state.activeClientId}/next-slot`);
+            const data = await res.json();
+            if (data.success && data.nextSlotIso) {
+              const dt = new Date(data.nextSlotIso);
+              queueTimeText.textContent = `${dt.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} (${data.timezone})`;
+              state.nextQueueSlotIso = data.nextSlotIso;
+            } else {
+              queueTimeText.textContent = 'Calculated automatically on submit';
+            }
+          } catch {
+            queueTimeText.textContent = 'Calculated automatically on submit';
+          }
+        }
+      } else if (radio.value === 'scheduled') {
+        if (queueBadge) queueBadge.style.display = 'none';
         el.scheduleInputs.style.display = 'flex';
         if (!el.scheduleDate.value) {
           const tomorrow = new Date();
@@ -133,6 +162,7 @@ function setupNavigation() {
         }
         el.btnPublishFinal.textContent = 'Schedule Post';
       } else {
+        if (queueBadge) queueBadge.style.display = 'none';
         el.scheduleInputs.style.display = 'none';
         el.btnPublishFinal.textContent = state.editingPostId ? 'Update Post' : 'Publish Post';
       }
@@ -377,7 +407,7 @@ async function inspectMasterVideo(file) {
         }
       };
     }
-  } catch (_err) {
+  } catch {
     badge.textContent = 'Video attached.';
   }
 }
@@ -673,8 +703,20 @@ async function submitPost(action = 'publish') {
   formData.append('platforms', JSON.stringify(state.selectedPlatforms));
   formData.append('action', action);
 
-  const isSched = document.querySelector('input[name="timing"]:checked').value === 'scheduled';
-  if (isSched && action !== 'draft') {
+  const timingMode = document.querySelector('input[name="timing"]:checked').value;
+  if (timingMode === 'queue' && action !== 'draft') {
+    if (state.nextQueueSlotIso) {
+      const dt = new Date(state.nextQueueSlotIso);
+      formData.append('schedule_date', dt.toISOString().split('T')[0]);
+      const hrs = String(dt.getHours()).padStart(2, '0');
+      const mins = String(dt.getMinutes()).padStart(2, '0');
+      formData.append('schedule_time', `${hrs}:${mins}`);
+    } else {
+      const tomorrow = new Date(Date.now() + 86400000);
+      formData.append('schedule_date', tomorrow.toISOString().split('T')[0]);
+      formData.append('schedule_time', '09:30');
+    }
+  } else if (timingMode === 'scheduled' && action !== 'draft') {
     formData.append('schedule_date', el.scheduleDate.value);
     formData.append('schedule_time', el.scheduleTime.value);
   }
@@ -1051,6 +1093,7 @@ function setupClientsManager() {
       if (wizardSelect) wizardSelect.value = state.activeClientId;
       showToast('Switched client workspace.', 'info');
       fetchQueue();
+      fetchQueueRules(state.activeClientId);
     });
   }
 
@@ -1614,6 +1657,24 @@ function openCalPostModal(post) {
     }
   }
 
+  const magicBtn = document.getElementById('cal-modal-btn-magic-link');
+  if (magicBtn) {
+    magicBtn.onclick = async () => {
+      try {
+        const res = await fetch(`/api/posts/${post.id}/request-approval`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.magicLink) {
+          await navigator.clipboard.writeText(data.magicLink);
+          showToast('Single-use client approval link copied to clipboard!', 'success');
+        } else {
+          showToast(`Error: ${data.error}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    };
+  }
+
   modal.style.display = 'flex';
 }
 
@@ -1966,5 +2027,126 @@ function renderCalendar() {
 
       grid.appendChild(cell);
     }
+  }
+}
+
+// --- BUFFER-STYLE QUEUE SLOTS MANAGER ---
+function setupQueueRulesUI() {
+  const btnAdd = document.getElementById('btn-add-queue-slot');
+  const form = document.getElementById('add-queue-slot-form');
+  const btnCancel = document.getElementById('btn-cancel-slot');
+  const btnSave = document.getElementById('btn-save-slot');
+
+  const weekdaySelect = document.getElementById('new-slot-weekday');
+  const timeInput = document.getElementById('new-slot-time');
+  const tzInput = document.getElementById('new-slot-tz');
+
+  if (tzInput && (!tzInput.value || tzInput.value === 'UTC')) {
+    try {
+      tzInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      tzInput.value = 'UTC';
+    }
+  }
+
+  if (btnAdd && form) {
+    btnAdd.addEventListener('click', () => {
+      form.style.display = 'block';
+    });
+  }
+
+  if (btnCancel && form) {
+    btnCancel.addEventListener('click', () => {
+      form.style.display = 'none';
+    });
+  }
+
+  if (btnSave && form) {
+    btnSave.addEventListener('click', async () => {
+      const weekday = weekdaySelect.value;
+      const time = timeInput.value;
+      const tz = tzInput.value.trim() || 'UTC';
+
+      try {
+        const res = await fetch(`/api/clients/${state.activeClientId}/queue-rules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            iso_weekday: weekday,
+            local_time: time,
+            timezone: tz
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Added recurring queue slot.', 'success');
+          form.style.display = 'none';
+          fetchQueueRules(state.activeClientId);
+        } else {
+          showToast(`Error: ${data.error}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+  }
+}
+
+async function fetchQueueRules(clientId) {
+  const container = document.getElementById('queue-slots-list');
+  if (!container) return;
+
+  try {
+    const res = await fetch(`/api/clients/${clientId}/queue-rules`);
+    const data = await res.json();
+    clearElement(container);
+
+    if (!data.success || !data.rules.length) {
+      const span = document.createElement('span');
+      span.style.fontSize = '12px';
+      span.style.color = 'var(--text-muted)';
+      span.textContent = 'No recurring slots defined. Choose "+ Add Slot" to set weekly automatic posting windows.';
+      container.appendChild(span);
+      return;
+    }
+
+    const weekdays = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    data.rules.forEach((rule) => {
+      const pill = document.createElement('div');
+      pill.className = 'badge badge-draft';
+      pill.style.display = 'inline-flex';
+      pill.style.alignItems = 'center';
+      pill.style.gap = '6px';
+      pill.style.padding = '5px 10px';
+      pill.style.fontSize = '12px';
+
+      const label = document.createElement('span');
+      label.textContent = `${weekdays[rule.iso_weekday]} at ${rule.local_time} (${rule.timezone})`;
+      pill.appendChild(label);
+
+      const delBtn = document.createElement('button');
+      delBtn.textContent = '×';
+      delBtn.style.background = 'transparent';
+      delBtn.style.border = 'none';
+      delBtn.style.color = 'var(--text-muted)';
+      delBtn.style.cursor = 'pointer';
+      delBtn.style.fontSize = '14px';
+      delBtn.title = 'Delete slot';
+      delBtn.addEventListener('click', async () => {
+        try {
+          await fetch(`/api/queue-rules/${rule.id}`, { method: 'DELETE' });
+          showToast('Removed slot.', 'info');
+          fetchQueueRules(clientId);
+        } catch (err) {
+          showToast(`Error: ${err.message}`, 'error');
+        }
+      });
+      pill.appendChild(delBtn);
+
+      container.appendChild(pill);
+    });
+  } catch (err) {
+    console.error('Error fetching queue rules:', err);
   }
 }
