@@ -5,6 +5,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { Worker } = require('node:worker_threads');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
 const ffprobeStatic = require('ffprobe-static');
@@ -179,8 +180,52 @@ function extractThumbnail(inputPath, outputPath, timestamp = '00:00:01') {
   });
 }
 
+/**
+ * Transcodes a video in a separate background OS worker thread.
+ * Guarantees zero event loop blocking for the main Express server.
+ */
+function transcodeToVerticalInWorker(inputPath, outputPath, options = {}) {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(inputPath)) {
+      return reject(new Error(`Input file not found: ${inputPath}`));
+    }
+
+    const workerPath = path.join(__dirname, 'worker.js');
+    const worker = new Worker(workerPath, {
+      workerData: {
+        inputPath,
+        outputPath,
+        threads: options.threads || 2
+      }
+    });
+
+    worker.on('message', (msg) => {
+      if (msg.type === 'done') {
+        resolve({
+          success: true,
+          outputPath,
+          filename: path.basename(outputPath)
+        });
+      } else if (msg.type === 'error') {
+        reject(new Error(`Worker transcoding error: ${msg.error}`));
+      }
+    });
+
+    worker.on('error', (err) => {
+      reject(new Error(`Transcoder worker thread failed: ${err.message}`));
+    });
+
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Transcoder worker stopped with exit code ${code}`));
+      }
+    });
+  });
+}
+
 module.exports = {
   inspectMedia,
   transcodeToVertical,
+  transcodeToVerticalInWorker,
   extractThumbnail
 };

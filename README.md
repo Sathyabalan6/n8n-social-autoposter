@@ -113,7 +113,10 @@ Open your browser at:
 3. **Queue & History:**
    - Searchable, client-scoped tabular view of all pending, published, and failed posts.
    - Direct links to live published posts on YouTube, X, and LinkedIn.
-4. **Workspaces & APIs:**
+4. **Community Engagement Inbox:**
+   - Actionable task-based inbox aggregating follower questions and comments across connected channels.
+   - Send quick replies directly from the dashboard without switching native apps.
+5. **Workspaces & APIs:**
    - Multi-tenant client workspace switcher.
    - Encrypted credential vault for YouTube OAuth, X API v2 keys, LinkedIn tokens, and Meta credentials.
 
@@ -173,6 +176,7 @@ Open your browser at:
 | **Link Anti-Penalty (First Comment)** | Paid Add-on (limited channels) | **Native Automated Decoupling (X, LinkedIn, IG, YT)** |
 | **Buffer-Style Recurring Queuing** | Proprietary queue slots | **Dynamic `Intl` DST-aware Queue Slots** |
 | **Client Approval Workflow** | Requires client paid account | **Single-Use HMAC-SHA256 Magic Links** |
+| **Community Inbox** | Paid add-on ($15/channel/mo) | **Actionable Task-Based Quick Responder** |
 | **YouTube Reach Knobs** | Basic Title/Desc only | **Categories, Custom thumbs, COPPA, AI flags, Notify shield** |
 | **X Heavy Ranker Knobs** | Basic text | **Alt-text injection, 150x reply settings locked** |
 | **LinkedIn Engagement Knobs** | Basic post | **PDF carousels, Disable-Reshare comment trigger** |

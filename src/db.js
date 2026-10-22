@@ -107,6 +107,22 @@ db.exec(`
     FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS engagement_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    platform TEXT NOT NULL,
+    external_comment_id TEXT NOT NULL,
+    parent_post_id TEXT NOT NULL,
+    author_name TEXT NOT NULL,
+    comment_text TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    is_replied INTEGER DEFAULT 0,
+    reply_text TEXT,
+    replied_at TEXT,
+    FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    UNIQUE(platform, external_comment_id)
+  );
+
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -284,6 +300,41 @@ const stmtGetPostsDueForT24H = db.prepare(`
       SELECT post_id FROM post_metrics_snapshots WHERE snapshot_type = 'T24H'
     )
   LIMIT 10
+`);
+
+// Engagement Tasks Statements (Task-Based Actionable Inbox)
+const stmtInsertTask = db.prepare(`
+  INSERT INTO engagement_tasks (
+    client_id, platform, external_comment_id, parent_post_id,
+    author_name, comment_text, created_at, is_replied
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+  ON CONFLICT(platform, external_comment_id) DO NOTHING
+`);
+
+const stmtGetTasksByClient = db.prepare(`
+  SELECT * FROM engagement_tasks 
+  WHERE client_id = ? AND is_replied = ? 
+  ORDER BY id DESC
+`);
+
+const stmtGetAllTasksByClient = db.prepare(`
+  SELECT * FROM engagement_tasks 
+  WHERE client_id = ? 
+  ORDER BY id DESC
+`);
+
+const stmtGetTaskById = db.prepare(`
+  SELECT * FROM engagement_tasks WHERE id = ?
+`);
+
+const stmtMarkTaskReplied = db.prepare(`
+  UPDATE engagement_tasks 
+  SET is_replied = 1, reply_text = ?, replied_at = ? 
+  WHERE id = ?
+`);
+
+const stmtDeleteTask = db.prepare(`
+  DELETE FROM engagement_tasks WHERE id = ?
 `);
 
 module.exports = {
@@ -587,5 +638,32 @@ module.exports = {
       platforms: safeJsonParse(r.platforms, []),
       results: safeJsonParse(r.results, {})
     }));
-  }
+  },
+  // Engagement Tasks API (Actionable Inbox)
+  createEngagementTask: (task) => {
+    const now = new Date().toISOString();
+    const res = stmtInsertTask.run(
+      task.client_id || 1,
+      task.platform.toUpperCase(),
+      task.external_comment_id,
+      String(task.parent_post_id),
+      task.author_name || 'Follower',
+      task.comment_text,
+      task.created_at || now
+    );
+    return res.lastInsertRowid;
+  },
+  getEngagementTasks: (clientId, isReplied = null) => {
+    if (isReplied !== null) {
+      return stmtGetTasksByClient.all(clientId, isReplied ? 1 : 0);
+    }
+    return stmtGetAllTasksByClient.all(clientId);
+  },
+  getEngagementTaskById: (id) => stmtGetTaskById.get(id),
+  markTaskReplied: (id, replyText) => {
+    const now = new Date().toISOString();
+    stmtMarkTaskReplied.run(replyText, now, id);
+    return true;
+  },
+  deleteEngagementTask: (id) => stmtDeleteTask.run(id)
 };

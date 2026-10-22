@@ -117,6 +117,36 @@ assert.strictEqual(latestList[0].impression_count, 1540, 'Latest impression coun
 db.deletePost(analyticsPostId);
 console.log('   ✓ Dual-snapshot metrics storage & aggregation passed');
 
+// --- 7. ACTIONABLE INBOX & ENGAGEMENT TASKS TESTS ---
+console.log('\n7. Testing Actionable Inbox & Tasks:');
+const taskId = db.createEngagementTask({
+  client_id: 1,
+  platform: 'YOUTUBE',
+  external_comment_id: 'yt_comment_98765',
+  parent_post_id: 'video_123',
+  author_name: 'Tech Enthusiast',
+  comment_text: 'Is this compatible with Node 24?'
+});
+assert(taskId, 'createEngagementTask must return numeric ID');
+
+const tasks = db.getEngagementTasks(1, 0);
+assert(tasks.length >= 1, 'Should return at least 1 unreplied task');
+const myTask = tasks.find((t) => t.id === taskId);
+assert.strictEqual(myTask.comment_text, 'Is this compatible with Node 24?');
+
+db.markTaskReplied(taskId, 'Yes, fully compatible!');
+const tasksAfterReply = db.getEngagementTasks(1, 0);
+assert(!tasksAfterReply.some((t) => t.id === taskId), 'Task must no longer be in unreplied list');
+
+const allTasks = db.getEngagementTasks(1, null);
+const repliedTask = allTasks.find((t) => t.id === taskId);
+assert.strictEqual(repliedTask.is_replied, 1, 'Task must have is_replied=1');
+assert.strictEqual(repliedTask.reply_text, 'Yes, fully compatible!');
+
+// Cleanup
+db.deleteEngagementTask(taskId);
+console.log('   ✓ Actionable task creation, reply state, and dismissal passed');
+
 console.log('\n========================================');
 console.log('🎉 ALL CI TESTS PASSED SUCCESSFULLY! (100%)');
 console.log('========================================\n');

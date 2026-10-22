@@ -9,7 +9,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const db = require('../db');
-const { publishYouTube, postYouTubeFirstComment, fetchYouTubeMetrics } = require('./youtube');
+const { publishYouTube, postYouTubeFirstComment, fetchYouTubeMetrics, fetchRecentYouTubeComments, replyToYouTubeComment } = require('./youtube');
 const { publishX, postXFirstReply, fetchXMetrics } = require('./x');
 const { publishLinkedIn, postLinkedInFirstComment } = require('./linkedin');
 const { isCloudStorageConfigured, uploadLocalFileToCloud } = require('../media/storage');
@@ -396,12 +396,74 @@ async function syncPostMetrics(post, snapshotType = 'MANUAL') {
   return { success: true, metrics: metricsResults };
 }
 
+/**
+ * Polls recent inbound comments from published posts into the actionable task queue
+ */
+async function syncInboundComments(clientId) {
+  const posts = db.getAllPosts(clientId);
+  let newTasksCount = 0;
+
+  for (const post of posts) {
+    if (post.status !== 'completed' && post.status !== 'partially_completed') continue;
+    const results = post.results || {};
+
+    if (results.youtube?.videoId) {
+      try {
+        const comments = await fetchRecentYouTubeComments(results.youtube.videoId, clientId);
+        for (const c of comments) {
+          const insertedId = db.createEngagementTask({
+            client_id: clientId,
+            platform: 'YOUTUBE',
+            external_comment_id: c.external_comment_id,
+            parent_post_id: results.youtube.videoId,
+            author_name: c.author_name,
+            comment_text: c.comment_text,
+            created_at: c.created_at
+          });
+          if (insertedId) newTasksCount++;
+        }
+      } catch (err) {
+        console.error('[Inbox Poller] Error polling YouTube comments:', err.message);
+      }
+    }
+  }
+
+  return { success: true, newTasksCount };
+}
+
+/**
+ * Dispatches a quick reply to an engagement task via the respective platform adapter
+ */
+async function replyToEngagementTask(task, replyText, clientId = null) {
+  const targetClient = clientId || task.client_id;
+  let dispatchResult = null;
+
+  if (task.platform === 'YOUTUBE') {
+    dispatchResult = await replyToYouTubeComment(task.external_comment_id, replyText, targetClient);
+  } else if (task.platform === 'X') {
+    dispatchResult = await postXFirstReply(task.external_comment_id, replyText, targetClient);
+  } else if (task.platform === 'LINKEDIN') {
+    dispatchResult = await postLinkedInFirstComment(task.parent_post_id, replyText, targetClient);
+  } else if (task.platform === 'INSTAGRAM') {
+    dispatchResult = await postInstagramFirstComment(task.external_comment_id, replyText, targetClient);
+  } else {
+    throw new Error(`Direct reply not supported for platform: ${task.platform}`);
+  }
+
+  db.markTaskReplied(task.id, replyText);
+  return { success: true, dispatchResult };
+}
+
 module.exports = {
   dispatchPost,
   syncPostMetrics,
+  syncInboundComments,
+  replyToEngagementTask,
   publishYouTube,
   postYouTubeFirstComment,
   fetchYouTubeMetrics,
+  fetchRecentYouTubeComments,
+  replyToYouTubeComment,
   publishX,
   postXFirstReply,
   fetchXMetrics,

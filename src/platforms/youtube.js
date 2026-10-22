@@ -252,6 +252,59 @@ async function fetchYouTubeMetrics(videoId, clientId = null) {
   };
 }
 
+async function fetchRecentYouTubeComments(videoId, clientId = null) {
+  const tokens = getStoredTokens(clientId);
+  if (!tokens) return [];
+
+  const oauth2Client = getOAuth2Client();
+  oauth2Client.setCredentials(tokens);
+  const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+  try {
+    const res = await youtube.commentThreads.list({
+      part: ['snippet'],
+      videoId,
+      maxResults: 20,
+      order: 'time'
+    });
+
+    const items = res.data?.items || [];
+    return items.map((t) => {
+      const top = t.snippet?.topLevelComment?.snippet || {};
+      return {
+        external_comment_id: t.id,
+        author_name: top.authorDisplayName || 'YouTube Viewer',
+        comment_text: top.textOriginal || '',
+        created_at: top.publishedAt || new Date().toISOString()
+      };
+    });
+  } catch (err) {
+    console.error('[YouTube Adapter] Comments fetch error:', err.message);
+    return [];
+  }
+}
+
+async function replyToYouTubeComment(commentThreadId, replyText, clientId = null) {
+  const tokens = getStoredTokens(clientId);
+  if (!tokens) throw new Error('YouTube credentials missing');
+
+  const oauth2Client = getOAuth2Client();
+  oauth2Client.setCredentials(tokens);
+  const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+  const res = await youtube.comments.insert({
+    part: ['snippet'],
+    requestBody: {
+      snippet: {
+        parentId: commentThreadId,
+        textOriginal: replyText.trim()
+      }
+    }
+  });
+
+  return { success: true, replyId: res.data?.id };
+}
+
 module.exports = {
   getAuthUrl,
   handleAuthCallback,
@@ -260,5 +313,7 @@ module.exports = {
   publishYouTube,
   uploadYouTubeThumbnail,
   postYouTubeFirstComment,
-  fetchYouTubeMetrics
+  fetchYouTubeMetrics,
+  fetchRecentYouTubeComments,
+  replyToYouTubeComment
 };

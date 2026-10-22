@@ -511,3 +511,83 @@ Content-Type: application/json
   "notes": "Please update the graphic to version 2"
 }
 ```
+
+---
+
+## 8. Community Engagement Inbox Endpoints
+
+### 8.1. List Actionable Engagement Tasks
+
+```http
+GET /api/clients/:id/inbox?is_replied=0
+```
+
+**Query Parameters:**
+- `is_replied` *(optional)*: `0` (unanswered comments only) or `1` (replied history). Omitting returns all tasks.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "tasks": [
+    {
+      "id": 1,
+      "client_id": 1,
+      "platform": "YOUTUBE",
+      "external_comment_id": "UgxK98...",
+      "parent_post_id": "video_123",
+      "author_name": "Tech Enthusiast",
+      "comment_text": "Is this compatible with Node 24?",
+      "created_at": "2026-10-22T14:30:00.000Z",
+      "is_replied": 0,
+      "reply_text": null,
+      "replied_at": null
+    }
+  ]
+}
+```
+
+### 8.2. Dispatch Quick Reply to Comment
+
+```http
+POST /api/inbox/:id/reply
+Content-Type: application/json
+
+{
+  "reply_text": "Yes, fully tested and supported on Node 24!"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "taskId": 1,
+  "result": { "success": true, "replyId": "Ugx..." }
+}
+```
+
+### 8.3. Sync Inbound Comments from Live Platforms
+
+```http
+POST /api/inbox/sync
+Content-Type: application/json
+
+{
+  "client_id": 1
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "syncRes": { "success": true, "newTasksCount": 3 }
+}
+```
+
+### 8.4. Dismiss Engagement Task
+
+```http
+DELETE /api/inbox/:id
+```
