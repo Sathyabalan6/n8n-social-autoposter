@@ -6,7 +6,7 @@ const multer = require('multer');
 
 const db = require('./db');
 const { compilePost, YOUTUBE_CATEGORIES, calculateNextAvailableSlot } = require('./compiler');
-const { dispatchPost } = require('./platforms');
+const { dispatchPost, syncPostMetrics } = require('./platforms');
 const { getAuthUrl, handleAuthCallback, getStoredTokens } = require('./platforms/youtube');
 const { inspectMedia, transcodeToVertical, extractThumbnail } = require('./media/transcoder');
 const { isCloudStorageConfigured, generatePresignedUploadUrl } = require('./media/storage');
@@ -547,6 +547,35 @@ app.patch('/api/posts/:id/schedule', (req, res) => {
     db.updatePostSchedule(id, scheduled_at, newStatus);
 
     res.json({ success: true, id, scheduled_at, status: newStatus });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- POST PERFORMANCE METRICS ENDPOINTS ---
+app.get('/api/posts/:id/metrics', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const post = db.getPostById(id);
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    const snapshots = db.getMetricsForPost(id);
+    const latest = db.getLatestPostMetrics(id);
+    res.json({ success: true, postId: id, snapshots, latest });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/posts/:id/sync-metrics', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const post = db.getPostById(id);
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    const result = await syncPostMetrics(post, 'MANUAL');
+    const latest = db.getLatestPostMetrics(id);
+    res.json({ success: true, postId: id, result, latest });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

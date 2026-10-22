@@ -90,6 +90,33 @@ console.log('\n5. Testing Two-Stage Idempotency Guard:');
 assert(typeof platforms.dispatchPost === 'function', 'dispatchPost must be a function');
 console.log('   ✓ Platform registry verified');
 
+// --- 6. DUAL-SNAPSHOT POST ANALYTICS TESTS ---
+console.log('\n6. Testing Dual-Snapshot Post Analytics:');
+const analyticsPostId = db.insertPost({
+  client_id: 1,
+  status: 'completed',
+  master_text: 'Analytics Snapshot Test Post'
+});
+
+const snapshotId = db.saveMetricsSnapshot(analyticsPostId, 'YOUTUBE', 'T24H', {
+  views: 1540,
+  likes: 85,
+  comments: 12
+});
+assert(snapshotId, 'saveMetricsSnapshot must return numeric ID');
+
+const postSnapshots = db.getMetricsForPost(analyticsPostId);
+assert.strictEqual(postSnapshots.length, 1, 'Must have 1 recorded snapshot');
+assert.strictEqual(postSnapshots[0].impression_count, 1540, 'Impression count must match');
+assert.strictEqual(postSnapshots[0].like_count, 85, 'Like count must match');
+
+const latestList = db.getLatestPostMetrics(analyticsPostId);
+assert.strictEqual(latestList[0].impression_count, 1540, 'Latest impression count must match');
+
+// Cleanup
+db.deletePost(analyticsPostId);
+console.log('   ✓ Dual-snapshot metrics storage & aggregation passed');
+
 console.log('\n========================================');
 console.log('🎉 ALL CI TESTS PASSED SUCCESSFULLY! (100%)');
 console.log('========================================\n');

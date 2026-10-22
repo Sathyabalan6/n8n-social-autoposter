@@ -888,6 +888,15 @@
 
         <div id="cal-modal-media-preview" style="margin-bottom: 14px; display: none;"></div>
 
+        <!-- Post Engagement Analytics Box -->
+        <div id="cal-modal-metrics-box" style="display: none; background: var(--bg-base); border: 1px solid var(--border-default); border-radius: 6px; padding: 10px 12px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Engagement Analytics</span>
+            <button class="btn btn-ghost" id="cal-modal-btn-sync-metrics" style="padding: 2px 6px; font-size: 11px; cursor: pointer;">🔄 Sync Metrics</button>
+          </div>
+          <div id="cal-modal-metrics-content" style="display: flex; gap: 14px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary);"></div>
+        </div>
+
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; font-size: 12px;">
           <div>
             <span style="display: block; margin-bottom: 2px; color: var(--text-muted);">Scheduled For</span>

@@ -6,11 +6,12 @@
 
 const fs = require('node:fs');
 const db = require('./db');
-const { dispatchPost } = require('./platforms');
+const { dispatchPost, syncPostMetrics } = require('./platforms');
 
 const workerId = `worker-${process.pid}-${Math.round(Math.random() * 1e6)}`;
 let timerId = null;
 let gcCounter = 0;
+let metricsCounter = 0;
 
 async function checkAndProcessDuePosts() {
   try {
@@ -36,6 +37,27 @@ async function checkAndProcessDuePosts() {
   if (gcCounter >= 10) {
     gcCounter = 0;
     cleanupOldMedia();
+  }
+
+  // Run analytics dual-snapshot poller every 15 cycles (~15 minutes)
+  metricsCounter += 1;
+  if (metricsCounter >= 15) {
+    metricsCounter = 0;
+    syncDuePostMetrics();
+  }
+}
+
+/**
+ * Syncs T24H metrics for completed posts older than 24 hours
+ */
+async function syncDuePostMetrics() {
+  try {
+    const duePosts = db.getPostsDueForMetricsSync();
+    for (const post of duePosts) {
+      await syncPostMetrics(post, 'T24H');
+    }
+  } catch (err) {
+    console.error('[Analytics Poller] Background sync error:', err.message);
   }
 }
 

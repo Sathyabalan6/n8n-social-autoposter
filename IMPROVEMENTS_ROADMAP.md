@@ -9,7 +9,7 @@ This document tracks completed enterprise features and provides ready-to-execute
 | Subsystem / Pillar | Status | Core Capability |
 | :--- | :---: | :--- |
 | **Pillar 1: Meta Media Ingestion (R2/S3)** | 🟢 **COMPLETED** | Presigned S3/R2 upload bridge for Instagram Reels / Facebook crawler |
-| **Pillar 2: Post Analytics Daemon** | 🟡 **Pending** | T+24h and T+7d dual-snapshot metric tracker ($0.01/post on X) |
+| **Pillar 2: Post Analytics Daemon** | 🟢 **COMPLETED** | T+24h and T+7d dual-snapshot metric tracker ($0.01/post on X) |
 | **Pillar 3: Recurring Queue Slots** | 🟢 **COMPLETED** | Buffer-style auto-slotting using native `Intl` DST timezone math |
 | **Pillar 4: Actionable Task Inbox** | 🟡 **Pending** | Task-based comment reply queue bypassing 2/10 feasibility sync traps |
 | **Pillar 5: Client Approval Magic Links** | 🟢 **COMPLETED** | Passwordless single-use HMAC-SHA256 client review portal (`/review/:id`) |
@@ -26,6 +26,16 @@ This document tracks completed enterprise features and provides ready-to-execute
 - [x] **1.2. Upload URL Route:** Implemented `POST /api/media/presign-upload` generating 15-minute presigned PUT URLs for browser uploads.
 - [x] **1.3. Ingestion Bridge:** In `src/platforms/index.js`, dynamically bridges local media via `uploadLocalFileToCloud()` and feeds the 24-hour presigned GET URL to Meta's `/media` container creator.
 - [x] **1.4. Container Polling & Fallback:** Implemented container status polling (`status_code === 'FINISHED'`) and local URL fallback detection.
+
+### ✅ Pillar 2: Post Performance Analytics & Sync Daemon (Dual-Snapshot)
+
+- [x] **2.1. Snapshot Table:** Added `post_metrics_snapshots` in SQLite using `BEGIN IMMEDIATE` transactions to prevent write lock collisions.
+- [x] **2.2. Metrics Daemon:** In `src/scheduler.js`, added a 15-minute background job finding published posts where `now - created_at >= 24h` that have not had their `T24H` snapshot.
+- [x] **2.3. Platform Pollers:**
+  - YouTube: `fetchYouTubeMetrics()` querying `youtube.videos.list({ part: ['statistics'] })`
+  - X (Twitter): `fetchXMetrics()` querying `GET /2/tweets/:id?tweet.fields=public_metrics`
+- [x] **2.4. Calendar & Modal Overlay:** Displays impression (`👁`) and like (`❤`) counts directly on completed calendar chips, with an on-demand "🔄 Sync Metrics" action inside the modal.
+- [x] **2.5. REST Endpoints:** Exposed `GET /api/posts/:id/metrics` and `POST /api/posts/:id/sync-metrics`.
 
 ### ✅ Pillar 3: Smart Recurring Queue Slots ("Buffer-Style Scheduling")
 
@@ -51,42 +61,6 @@ This document tracks completed enterprise features and provides ready-to-execute
 ---
 
 ## 🟡 Remaining Things to Be Fixed & Implemented (Future Backlog)
-
-### 📌 Pillar 2: Post Performance Analytics & Sync Daemon
-
-#### Key Technical Context
-
-- **The X API Cost Trap:** X API charges ~$0.005 per read operation. Continuous polling of 1,000 tweets hourly burns **$3,600/month**.
-- **The Dual-Snapshot Rule:** Polling metrics *strictly twice* (at **T+24h** for viral velocity and **T+7d** for cumulative reach) caps X read costs at **exactly $0.01 per post over its lifetime**.
-- **Instagram Rate Limit Formula:** Calls in 24h = $4800 \times \text{Number of Impressions}$, capped at 200 calls/user/hour.
-- **Database Concurrency:** In `node:sqlite`, bulk snapshot writes must use `BEGIN IMMEDIATE` to acquire write locks upfront without throwing `SQLITE_BUSY`.
-
-#### Execution Tasks:
-
-- [ ] **2.1. Snapshot Table:** Add `post_metrics_snapshots` in SQLite:
-  ```sql
-  CREATE TABLE IF NOT EXISTS post_metrics_snapshots (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      post_id INTEGER NOT NULL,
-      platform TEXT NOT NULL,
-      snapshot_type TEXT NOT NULL, -- 'T24H' or 'T7D'
-      snapshot_time INTEGER NOT NULL,
-      impression_count INTEGER DEFAULT 0,
-      reach_count INTEGER DEFAULT 0,
-      like_count INTEGER DEFAULT 0,
-      reply_count INTEGER DEFAULT 0,
-      repost_count INTEGER DEFAULT 0,
-      raw_metrics TEXT,
-      FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
-  );
-  ```
-- [ ] **2.2. Metrics Daemon:** In `src/scheduler.js`, run a 15-minute job finding published posts where `now - created_at >= 24h` (or 7d) that have not had their snapshot taken.
-- [ ] **2.3. Platform Pollers:**
-  - YouTube: `youtube.videos.list({ part: ['statistics'], id: videoId })`
-  - X: `GET /2/tweets/:id?tweet.fields=public_metrics`
-  - LinkedIn: `GET /rest/organizationalEntityShareStatistics?q=organizationalEntity`
-  - Instagram: `GET /{media-id}/insights?metric=impressions,reach,saved`
-- [ ] **2.4. Calendar Overlay:** Display impression and like badges directly on completed post chips in the Editorial Calendar.
 
 ---
 

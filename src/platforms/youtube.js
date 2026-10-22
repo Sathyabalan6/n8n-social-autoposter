@@ -149,13 +149,12 @@ async function publishYouTube(post) {
   // Proactive Token Refresh: If token expires within 5 minutes, refresh proactively before upload
   if (tokens.refresh_token && tokens.expiry_date && (Date.now() + 300000 > tokens.expiry_date)) {
     try {
-      console.log('[YouTube Adapter] Proactive token refresh (T-5 min window)...');
       const refreshed = await oauth2Client.refreshAccessToken();
       const newCreds = { ...tokens, ...refreshed.credentials };
       saveTokens(newCreds, post.client_id);
       oauth2Client.setCredentials(newCreds);
     } catch (refreshErr) {
-      console.warn('[YouTube Adapter] Proactive refresh attempt error:', refreshErr.message);
+      console.error('[YouTube Adapter] Proactive refresh attempt error:', refreshErr.message);
     }
   }
 
@@ -228,6 +227,31 @@ async function publishYouTube(post) {
   }
 }
 
+async function fetchYouTubeMetrics(videoId, clientId = null) {
+  const tokens = getStoredTokens(clientId);
+  if (!tokens) throw new Error('YouTube credentials missing');
+  const oauth2Client = getOAuth2Client();
+  oauth2Client.setCredentials(tokens);
+  const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+  const res = await youtube.videos.list({
+    part: ['statistics'],
+    id: [videoId]
+  });
+
+  const item = res.data?.items?.[0];
+  if (!item) throw new Error(`YouTube video ${videoId} not found`);
+  const stats = item.statistics || {};
+
+  return {
+    views: parseInt(stats.viewCount || 0, 10),
+    impressions: parseInt(stats.viewCount || 0, 10),
+    likes: parseInt(stats.likeCount || 0, 10),
+    comments: parseInt(stats.commentCount || 0, 10),
+    raw: stats
+  };
+}
+
 module.exports = {
   getAuthUrl,
   handleAuthCallback,
@@ -235,5 +259,6 @@ module.exports = {
   saveTokens,
   publishYouTube,
   uploadYouTubeThumbnail,
-  postYouTubeFirstComment
+  postYouTubeFirstComment,
+  fetchYouTubeMetrics
 };

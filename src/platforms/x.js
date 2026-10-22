@@ -472,9 +472,56 @@ async function postXFirstReply(tweetId, replyText, clientId = null) {
   };
 }
 
+async function fetchXMetrics(tweetId, clientId = null) {
+  const creds = getXTokens(clientId);
+  if (!creds || (!creds.accessToken && !creds.apiKey)) {
+    throw new Error('X credentials missing for metrics sync.');
+  }
+
+  const hasOAuth1 = Boolean(creds.apiKey && creds.apiSecret && creds.accessToken && creds.accessSecret);
+  const bearerToken = creds.accessToken || creds.bearerToken;
+
+  const url = `https://api.twitter.com/2/tweets/${tweetId}?tweet.fields=public_metrics`;
+  let authHeader;
+  if (hasOAuth1) {
+    authHeader = buildOAuth1Header({
+      method: 'GET',
+      url,
+      queryParams: { 'tweet.fields': 'public_metrics' },
+      consumerKey: creds.apiKey,
+      consumerSecret: creds.apiSecret,
+      token: creds.accessToken,
+      tokenSecret: creds.accessSecret
+    });
+  } else {
+    authHeader = `Bearer ${bearerToken}`;
+  }
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { Authorization: authHeader }
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const errMsg = data.detail || data.title || `HTTP ${res.status}`;
+    throw new Error(`X metrics fetch failed: ${errMsg}`);
+  }
+
+  const metrics = data.data?.public_metrics || {};
+  return {
+    impressions: metrics.impression_count || 0,
+    likes: metrics.like_count || 0,
+    replies: metrics.reply_count || 0,
+    reposts: metrics.retweet_count || 0,
+    raw: metrics
+  };
+}
+
 module.exports = {
   publishX,
   uploadMediaToX,
   getXTokens,
-  postXFirstReply
+  postXFirstReply,
+  fetchXMetrics
 };

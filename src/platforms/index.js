@@ -9,8 +9,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const db = require('../db');
-const { publishYouTube, postYouTubeFirstComment } = require('./youtube');
-const { publishX, postXFirstReply } = require('./x');
+const { publishYouTube, postYouTubeFirstComment, fetchYouTubeMetrics } = require('./youtube');
+const { publishX, postXFirstReply, fetchXMetrics } = require('./x');
 const { publishLinkedIn, postLinkedInFirstComment } = require('./linkedin');
 const { isCloudStorageConfigured, uploadLocalFileToCloud } = require('../media/storage');
 
@@ -366,12 +366,45 @@ async function dispatchPost(post) {
   };
 }
 
+/**
+ * Syncs engagement analytics snapshots (T24H, T7D, or MANUAL)
+ */
+async function syncPostMetrics(post, snapshotType = 'MANUAL') {
+  const results = post.results || {};
+  const metricsResults = {};
+
+  if (results.youtube?.videoId) {
+    try {
+      const ytMetrics = await fetchYouTubeMetrics(results.youtube.videoId, post.client_id);
+      db.saveMetricsSnapshot(post.id, 'YOUTUBE', snapshotType, ytMetrics);
+      metricsResults.youtube = ytMetrics;
+    } catch (err) {
+      metricsResults.youtube = { error: err.message };
+    }
+  }
+
+  if (results.x?.tweetId) {
+    try {
+      const xMetrics = await fetchXMetrics(results.x.tweetId, post.client_id);
+      db.saveMetricsSnapshot(post.id, 'X', snapshotType, xMetrics);
+      metricsResults.x = xMetrics;
+    } catch (err) {
+      metricsResults.x = { error: err.message };
+    }
+  }
+
+  return { success: true, metrics: metricsResults };
+}
+
 module.exports = {
   dispatchPost,
+  syncPostMetrics,
   publishYouTube,
   postYouTubeFirstComment,
+  fetchYouTubeMetrics,
   publishX,
   postXFirstReply,
+  fetchXMetrics,
   publishLinkedIn,
   postLinkedInFirstComment,
   publishInstagram,

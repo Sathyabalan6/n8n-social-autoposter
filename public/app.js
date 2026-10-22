@@ -1675,6 +1675,73 @@ function openCalPostModal(post) {
     };
   }
 
+  // --- POST PERFORMANCE METRICS IN MODAL ---
+  const metricsBox = document.getElementById('cal-modal-metrics-box');
+  const metricsContent = document.getElementById('cal-modal-metrics-content');
+  const syncBtn = document.getElementById('cal-modal-btn-sync-metrics');
+
+  if (metricsBox && metricsContent) {
+    if (post.status === 'completed') {
+      metricsBox.style.display = 'block';
+      clearElement(metricsContent);
+      metricsContent.textContent = 'Loading metrics...';
+
+      const loadMetrics = async () => {
+        try {
+          const res = await fetch(`/api/posts/${post.id}/metrics`);
+          const data = await res.json();
+          clearElement(metricsContent);
+
+          if (data.success && data.latest && data.latest.length > 0) {
+            let totalImpr = 0;
+            let totalLikes = 0;
+            let totalReplies = 0;
+            data.latest.forEach((m) => {
+              totalImpr += m.impression_count || 0;
+              totalLikes += m.like_count || 0;
+              totalReplies += m.reply_count || 0;
+            });
+            const vSpan = document.createElement('span');
+            vSpan.textContent = `👁 Views: ${totalImpr}`;
+            const lSpan = document.createElement('span');
+            lSpan.textContent = `❤ Likes: ${totalLikes}`;
+            const rSpan = document.createElement('span');
+            rSpan.textContent = `💬 Replies: ${totalReplies}`;
+            metricsContent.appendChild(vSpan);
+            metricsContent.appendChild(lSpan);
+            metricsContent.appendChild(rSpan);
+          } else {
+            metricsContent.textContent = 'No snapshots recorded yet (dual-snapshot poller scheduled at T+24h).';
+          }
+        } catch {
+          metricsContent.textContent = 'Failed to load metrics.';
+        }
+      };
+
+      loadMetrics();
+
+      if (syncBtn) {
+        syncBtn.onclick = async () => {
+          syncBtn.disabled = true;
+          syncBtn.textContent = 'Syncing...';
+          try {
+            await fetch(`/api/posts/${post.id}/sync-metrics`, { method: 'POST' });
+            showToast('Metrics synced from live platform API.', 'success');
+            await loadMetrics();
+            fetchQueue();
+          } catch (err) {
+            showToast(`Sync failed: ${err.message}`, 'error');
+          } finally {
+            syncBtn.disabled = false;
+            syncBtn.textContent = '🔄 Sync Metrics';
+          }
+        };
+      }
+    } else {
+      metricsBox.style.display = 'none';
+    }
+  }
+
   modal.style.display = 'flex';
 }
 
@@ -1851,6 +1918,16 @@ function renderCalendar() {
         });
         chip.appendChild(icons);
 
+        if (post.status === 'completed' && post.metrics) {
+          const mBadge = document.createElement('div');
+          mBadge.style.fontSize = '9px';
+          mBadge.style.fontFamily = 'var(--font-mono)';
+          mBadge.style.color = 'var(--text-secondary)';
+          mBadge.style.marginTop = '2px';
+          mBadge.textContent = `👁 ${post.metrics.total_impressions || 0} • ❤ ${post.metrics.total_likes || 0}`;
+          chip.appendChild(mBadge);
+        }
+
         // Drag events on chip
         chip.addEventListener('dragstart', (e) => {
           chip.classList.add('dragging');
@@ -1986,6 +2063,16 @@ function renderCalendar() {
           icons.appendChild(iconSpan);
         });
         chip.appendChild(icons);
+
+        if (post.status === 'completed' && post.metrics) {
+          const mBadge = document.createElement('div');
+          mBadge.style.fontSize = '9px';
+          mBadge.style.fontFamily = 'var(--font-mono)';
+          mBadge.style.color = 'var(--text-secondary)';
+          mBadge.style.marginTop = '2px';
+          mBadge.textContent = `👁 ${post.metrics.total_impressions || 0} • ❤ ${post.metrics.total_likes || 0}`;
+          chip.appendChild(mBadge);
+        }
 
         chip.addEventListener('dragstart', (e) => {
           chip.classList.add('dragging');

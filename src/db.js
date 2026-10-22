@@ -91,6 +91,22 @@ db.exec(`
     FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS post_metrics_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id INTEGER NOT NULL,
+    platform TEXT NOT NULL,
+    snapshot_type TEXT NOT NULL,
+    snapshot_time INTEGER NOT NULL,
+    impression_count INTEGER DEFAULT 0,
+    reach_count INTEGER DEFAULT 0,
+    like_count INTEGER DEFAULT 0,
+    reply_count INTEGER DEFAULT 0,
+    repost_count INTEGER DEFAULT 0,
+    raw_metrics TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -224,6 +240,52 @@ const stmtGetPendingScheduledPosts = db.prepare(`SELECT id, scheduled_at FROM po
 const stmtSetApprovalToken = db.prepare(`UPDATE posts SET approval_token_hash = ?, token_expires_at = ?, workflow_state = ?, updated_at = ? WHERE id = ?`);
 const stmtSetWorkflowState = db.prepare(`UPDATE posts SET workflow_state = ?, approval_token_hash = NULL, updated_at = ? WHERE id = ?`);
 
+// Metrics Snapshots Statements (Time-Series Dual-Snapshot Engine)
+const stmtInsertMetricsSnapshot = db.prepare(`
+  INSERT INTO post_metrics_snapshots (
+    post_id, platform, snapshot_type, snapshot_time,
+    impression_count, reach_count, like_count, reply_count, repost_count,
+    raw_metrics, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const stmtGetMetricsByPost = db.prepare(`
+  SELECT * FROM post_metrics_snapshots WHERE post_id = ? ORDER BY snapshot_time ASC
+`);
+
+const stmtGetLatestPostMetrics = db.prepare(`
+  SELECT post_id, platform, snapshot_type, snapshot_time,
+         impression_count, reach_count, like_count, reply_count, repost_count
+  FROM post_metrics_snapshots
+  WHERE post_id = ?
+  ORDER BY snapshot_time DESC
+`);
+
+const stmtGetAggregatedMetrics = db.prepare(`
+  SELECT post_id, 
+         SUM(impression_count) as total_impressions,
+         SUM(like_count) as total_likes,
+         SUM(reply_count) as total_replies,
+         SUM(repost_count) as total_reposts
+  FROM (
+    SELECT post_id, platform, impression_count, like_count, reply_count, repost_count
+    FROM post_metrics_snapshots
+    GROUP BY post_id, platform
+    HAVING snapshot_time = MAX(snapshot_time)
+  )
+  GROUP BY post_id
+`);
+
+const stmtGetPostsDueForT24H = db.prepare(`
+  SELECT p.* FROM posts p
+  WHERE p.status = 'completed'
+    AND p.created_at <= datetime('now', '-24 hours')
+    AND p.id NOT IN (
+      SELECT post_id FROM post_metrics_snapshots WHERE snapshot_type = 'T24H'
+    )
+  LIMIT 10
+`);
+
 module.exports = {
   db,
   insertPost: (post) => {
@@ -268,21 +330,27 @@ module.exports = {
   },
   getAllPosts: (clientId = null) => {
     const rows = clientId ? stmtGetByClient.all(clientId) : stmtGetAll.all();
+    const aggMetrics = stmtGetAggregatedMetrics.all();
+    const metricsMap = new Map(aggMetrics.map((m) => [m.post_id, m]));
+
     return rows.map(r => ({
       ...r,
       media_overrides: safeJsonParse(r.media_overrides, {}),
       platforms: safeJsonParse(r.platforms, []),
-      results: safeJsonParse(r.results, {})
+      results: safeJsonParse(r.results, {}),
+      metrics: metricsMap.get(r.id) || null
     }));
   },
   getPostById: (id) => {
     const row = stmtGetById.get(id);
     if (!row) return null;
+    const latestMetrics = stmtGetLatestPostMetrics.all(id);
     return {
       ...row,
       media_overrides: safeJsonParse(row.media_overrides, {}),
       platforms: safeJsonParse(row.platforms, []),
-      results: safeJsonParse(row.results, {})
+      results: safeJsonParse(row.results, {}),
+      latest_metrics: latestMetrics
     };
   },
   claimNextJob: (workerId, leaseDurationMs = 30000) => {
@@ -482,5 +550,42 @@ module.exports = {
     const now = new Date().toISOString();
     stmtSetWorkflowState.run(workflowState, now, postId);
     return true;
+  },
+  // Metrics Snapshot API
+  saveMetricsSnapshot: (postId, platform, snapshotType, metrics = {}) => {
+    const now = new Date();
+    const epochMs = now.getTime();
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const res = stmtInsertMetricsSnapshot.run(
+        postId,
+        platform.toUpperCase(),
+        snapshotType,
+        epochMs,
+        metrics.impressions || metrics.views || 0,
+        metrics.reach || 0,
+        metrics.likes || 0,
+        metrics.replies || metrics.comments || 0,
+        metrics.reposts || metrics.retweets || 0,
+        JSON.stringify(metrics.raw || metrics),
+        now.toISOString()
+      );
+      db.exec('COMMIT');
+      return res.lastInsertRowid;
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  },
+  getMetricsForPost: (postId) => stmtGetMetricsByPost.all(postId),
+  getLatestPostMetrics: (postId) => stmtGetLatestPostMetrics.all(postId),
+  getPostsDueForMetricsSync: () => {
+    const rows = stmtGetPostsDueForT24H.all();
+    return rows.map(r => ({
+      ...r,
+      media_overrides: safeJsonParse(r.media_overrides, {}),
+      platforms: safeJsonParse(r.platforms, []),
+      results: safeJsonParse(r.results, {})
+    }));
   }
 };
