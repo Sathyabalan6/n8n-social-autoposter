@@ -9,6 +9,7 @@ const { compilePost, YOUTUBE_CATEGORIES, calculateNextAvailableSlot } = require(
 const { dispatchPost } = require('./platforms');
 const { getAuthUrl, handleAuthCallback, getStoredTokens } = require('./platforms/youtube');
 const { inspectMedia, transcodeToVertical, extractThumbnail } = require('./media/transcoder');
+const { isCloudStorageConfigured, generatePresignedUploadUrl } = require('./media/storage');
 const { generateApprovalToken, validateApprovalToken } = require('./crypto');
 const { startScheduler } = require('./scheduler');
 
@@ -226,6 +227,24 @@ app.post('/api/compile', (req, res) => {
 });
 
 // --- MEDIA ENGINE & TRANSCODING ROUTES ---
+app.get('/api/media/storage-status', (_req, res) => {
+  res.json({ success: true, configured: isCloudStorageConfigured() });
+});
+
+app.post('/api/media/presign-upload', async (req, res) => {
+  try {
+    if (!isCloudStorageConfigured()) {
+      return res.status(400).json({ success: false, error: 'Cloud storage is not configured in .env' });
+    }
+    const { filename, mimetype, tenantId } = req.body;
+    if (!filename) return res.status(400).json({ success: false, error: 'filename is required' });
+    const { uploadUrl, objectKey } = await generatePresignedUploadUrl(filename, mimetype, tenantId || 'default');
+    res.json({ success: true, uploadUrl, objectKey });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/media/inspect', upload.single('media'), async (req, res) => {
   try {
     let filePath = req.file?.path;
@@ -629,6 +648,7 @@ app.get('/review/:id', (req, res) => {
   }
 
   const isValid = validateApprovalToken(token, post.approval_token_hash, post.token_expires_at);
+  const safeToken = (token || '').replace(/[^a-f0-9]/gi, '');
 
   let badgeClass = 'badge-expired';
   let badgeText = 'Link Expired';
@@ -691,7 +711,7 @@ app.get('/review/:id', (req, res) => {
           const res = await fetch('/api/review/${post.id}/approve', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: '${token}' })
+            body: JSON.stringify({ token: '${safeToken}' })
           });
           const data = await res.json();
           if (data.success) {
@@ -707,7 +727,7 @@ app.get('/review/:id', (req, res) => {
           const res = await fetch('/api/review/${post.id}/reject', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: '${token}', notes })
+            body: JSON.stringify({ token: '${safeToken}', notes })
           });
           const data = await res.json();
           if (data.success) {

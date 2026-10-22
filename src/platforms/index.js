@@ -6,10 +6,13 @@
  * Stage 2: Automated Anti-Penalty First-Comment Decoupled Injection (X, LinkedIn, YouTube, IG, Threads)
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const db = require('../db');
 const { publishYouTube, postYouTubeFirstComment } = require('./youtube');
 const { publishX, postXFirstReply } = require('./x');
 const { publishLinkedIn, postLinkedInFirstComment } = require('./linkedin');
+const { isCloudStorageConfigured, uploadLocalFileToCloud } = require('../media/storage');
 
 function getClientPlatformTokens(clientId, platform) {
   if (!clientId) return null;
@@ -35,22 +38,117 @@ async function publishInstagram(post) {
     };
   }
 
-  try {
-    return {
-      platform: 'instagram',
-      success: true,
-      caption: post.instagram_caption,
-      audio_name: post.instagram_audio_name || 'Original Audio',
-      is_trial: Boolean(post.instagram_is_trial),
-      trial_params: post.instagram_is_trial ? { graduation_strategy: 'MANUAL' } : null,
-      note: 'Validated with audio branding and trial parameters.'
-    };
-  } catch (err) {
+  const mediaPath = post.media_overrides?.instagram?.path || post.media_path;
+  if (!mediaPath || !fs.existsSync(mediaPath)) {
     return {
       platform: 'instagram',
       success: false,
-      error: err.message
+      error: 'Instagram requires a photo or video media file.'
     };
+  }
+
+  const ext = path.extname(mediaPath).toLowerCase();
+  const isVideo = ['.mp4', '.mov', '.m4v'].includes(ext);
+
+  let publicMediaUrl = null;
+  if (isCloudStorageConfigured()) {
+    try {
+      const uploadRes = await uploadLocalFileToCloud(mediaPath);
+      publicMediaUrl = uploadRes.publicUrl;
+    } catch (s3Err) {
+      return {
+        platform: 'instagram',
+        success: false,
+        error: `Cloud storage upload failed: ${s3Err.message}`
+      };
+    }
+  } else {
+    const baseUrl = process.env.BASE_URL;
+    if (baseUrl && !baseUrl.includes('localhost') && !baseUrl.includes('127.0.0.1')) {
+      publicMediaUrl = `${baseUrl.replace(/\/$/, '')}/uploads/${path.basename(mediaPath)}`;
+    } else {
+      return {
+        platform: 'instagram',
+        success: false,
+        error: 'Instagram requires a public HTTPS URL for media ingestion. Please configure Cloudflare R2 / S3 storage in .env (or run a public tunnel).'
+      };
+    }
+  }
+
+  // --- META GRAPH API TWO-STEP CONTAINER PUBLISHING ---
+  try {
+    const containerPayload = {
+      caption: post.instagram_caption || post.master_text,
+      access_token: token
+    };
+
+    if (isVideo) {
+      containerPayload.media_type = 'REELS';
+      containerPayload.video_url = publicMediaUrl;
+      containerPayload.share_to_feed = true;
+      if (post.instagram_audio_name) {
+        containerPayload.audio_name = post.instagram_audio_name;
+      }
+      if (post.instagram_is_trial) {
+        containerPayload.trial_params = { graduation_strategy: 'MANUAL' };
+      }
+    } else {
+      containerPayload.image_url = publicMediaUrl;
+    }
+
+    const containerRes = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(igAccountId)}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(containerPayload)
+    });
+
+    const containerData = await containerRes.json();
+    if (!containerRes.ok) {
+      const errMsg = containerData.error?.message || `HTTP ${containerRes.status}`;
+      return { platform: 'instagram', success: false, error: errMsg };
+    }
+
+    const creationId = containerData.id;
+
+    // For video / Reels: poll container status until FINISHED
+    if (isVideo) {
+      let statusCode = 'IN_PROGRESS';
+      let attempts = 0;
+      while (statusCode !== 'FINISHED' && attempts < 30) {
+        await new Promise((r) => setTimeout(r, 4000));
+        attempts++;
+        const statusRes = await fetch(`https://graph.facebook.com/v20.0/${creationId}?fields=status_code&access_token=${token}`);
+        const statusData = await statusRes.json();
+        statusCode = statusData.status_code;
+
+        if (statusCode === 'ERROR') {
+          return { platform: 'instagram', success: false, error: 'Meta media processing error (transcoding failed on Meta servers)' };
+        }
+      }
+    }
+
+    // Publish container
+    const publishRes = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(igAccountId)}/media_publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creation_id: creationId, access_token: token })
+    });
+
+    const pubData = await publishRes.json();
+    if (!publishRes.ok) {
+      return { platform: 'instagram', success: false, error: pubData.error?.message || 'Media publish failed' };
+    }
+
+    const mediaId = pubData.id;
+    return {
+      platform: 'instagram',
+      success: true,
+      mediaId,
+      url: `https://www.instagram.com/p/${mediaId}/`,
+      isReel: isVideo
+    };
+  } catch (apiErr) {
+    return { platform: 'instagram', success: false, error: apiErr.message };
   }
 }
 
