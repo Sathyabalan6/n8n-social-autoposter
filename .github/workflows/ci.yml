@@ -1,0 +1,31 @@
+name: SocialPulse Studio CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js 24
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Validate JavaScript Syntax
+      run: node -c src/server.js src/db.js src/compiler.js src/crypto.js src/scheduler.js src/platforms/index.js src/platforms/youtube.js src/platforms/x.js src/platforms/linkedin.js src/media/transcoder.js
+
+    - name: Run Test Suite
+      run: npm test
+      env:
+        ENCRYPTION_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
