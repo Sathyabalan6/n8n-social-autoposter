@@ -143,26 +143,30 @@ Open your browser at:
 │       ├── youtube.js    # YouTube Data API v3, 50MB thumbnails & comment threads
 │       ├── x.js          # X API v2 (Tweets), alt-text & threaded replies
 │       └── linkedin.js   # LinkedIn REST Posts API, PDF carousels & comment edge
-├── ARCHITECTURE.md       # Deep-dive architectural review & failure modes
+├── ARCHITECTURE.md       # Technical design, concurrency & design choices rationale
+├── ROADMAP.md            # Single master roadmap & upcoming 80/20 sprints
 ├── API_REFERENCE.md      # Complete REST API documentation & payload schemas
-├── CLIENT_REQUIREMENTS.md # Client onboarding questionnaire & intake form
 ├── DEPLOYMENT_GUIDE.md   # Production deployment & API developer portal setup
-├── IMPROVEMENTS_ROADMAP.md # Enterprise V2 execution blueprints & technical findings
-├── plan.md               # Phased implementation plan & completion status
+├── CLIENT_REQUIREMENTS.md # Client onboarding questionnaire & intake form
+├── FINDINGS.md           # Deep research findings & anti-bot analysis archive
+├── SECURITY.md           # Security policy & vulnerability reporting
+├── CONTRIBUTING.md       # Contributing guidelines & code standards
+├── LICENSE               # Official MIT open-source license
 ├── package.json
-└── social_auto_poster_workflow.json # Optional n8n workflow integration
+└── test/
+    └── verify.js         # Automated CI test suite (100% pass)
 ```
 
 ---
 
 ## 📚 Detailed Documentation
 
-- **[Architecture Review & System Design](ARCHITECTURE.md)**: Concurrency models, optimistic locking, security posture, and failure modes.
+- **[Architecture & Design Decisions](ARCHITECTURE.md)**: Concurrency models, optimistic locking, security posture, and **why we chose this architecture**.
+- **[Master Roadmap & Sprints](ROADMAP.md)**: The single implementation roadmap and upcoming 80/20 feature sprints.
 - **[REST API Reference](API_REFERENCE.md)**: Full endpoint list, query parameters, request/response JSON schemas.
-- **[Client Onboarding Checklist](CLIENT_REQUIREMENTS.md)**: Ready-to-send intake questionnaire for brand permissions and API credentials.
 - **[Production & Developer Setup Guide](DEPLOYMENT_GUIDE.md)**: How to configure developer apps for Google, Twitter, LinkedIn, and Meta, plus VPS deployment.
-- **[Enterprise Improvements Roadmap (V2)](IMPROVEMENTS_ROADMAP.md)**: Technical findings and execution blueprints for Cloudflare R2, Dual-Snapshot Analytics, Dynamic Queue Slots, and Client Magic Links.
-- **[Engineering Implementation Plan](plan.md)**: Complete tracking of all 6 architectural phases.
+- **[Client Onboarding Checklist](CLIENT_REQUIREMENTS.md)**: Ready-to-send intake questionnaire for brand permissions and API credentials.
+- **[Technical Research Archive](FINDINGS.md)**: Research sweeps on social APIs, anti-bot mechanisms, and unit economics.
 
 ---
 
