@@ -1,3 +1,14 @@
+// --- GLOBAL AUTHENTICATED FETCH INTERCEPTOR ---
+const originalFetch = window.fetch;
+window.fetch = async function (resource, init = {}) {
+  const token = localStorage.getItem('socialpulse_token');
+  const headers = new Headers(init.headers || {});
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return originalFetch(resource, { ...init, headers });
+};
+
 // --- STATE MANAGEMENT ---
 const state = {
   selectedPlatforms: ['youtube', 'x', 'linkedin'],
@@ -2450,3 +2461,87 @@ async function fetchInboxTasks(clientId, isReplied = 0) {
     console.error('Error fetching inbox tasks:', err);
   }
 }
+
+// --- AUTHENTICATION UI LOGIC ---
+const authTriggerBtn = document.getElementById('btn-auth-trigger');
+const authBadge = document.getElementById('user-role-badge');
+const authModal = document.getElementById('auth-modal');
+const closeAuthModalBtn = document.getElementById('btn-close-auth-modal');
+const authForm = document.getElementById('form-auth-login');
+
+function updateAuthUI() {
+  const token = localStorage.getItem('socialpulse_token');
+  const userJson = localStorage.getItem('socialpulse_user');
+  if (token && userJson && authBadge && authTriggerBtn) {
+    try {
+      const user = JSON.parse(userJson);
+      authBadge.style.display = 'inline-block';
+      authBadge.textContent = `${user.name || user.email} (${user.role})`;
+      authTriggerBtn.textContent = 'Sign Out';
+    } catch {
+      localStorage.removeItem('socialpulse_token');
+      localStorage.removeItem('socialpulse_user');
+      authBadge.style.display = 'none';
+      authTriggerBtn.textContent = 'Sign In';
+    }
+  } else if (authBadge && authTriggerBtn) {
+    authBadge.style.display = 'none';
+    authTriggerBtn.textContent = 'Sign In';
+  }
+}
+
+if (authTriggerBtn) {
+  authTriggerBtn.onclick = () => {
+    const token = localStorage.getItem('socialpulse_token');
+    if (token) {
+      localStorage.removeItem('socialpulse_token');
+      localStorage.removeItem('socialpulse_user');
+      updateAuthUI();
+      showToast('Signed out successfully.', 'info');
+    } else if (authModal) {
+      authModal.style.display = 'flex';
+    }
+  };
+}
+
+if (closeAuthModalBtn && authModal) {
+  closeAuthModalBtn.onclick = () => {
+    authModal.style.display = 'none';
+  };
+}
+
+if (authForm) {
+  authForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('auth-input-email').value.trim();
+    const password = document.getElementById('auth-input-password').value;
+    const submitBtn = document.getElementById('btn-submit-auth');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing in...';
+
+    try {
+      const res = await originalFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (data.success && data.token) {
+        localStorage.setItem('socialpulse_token', data.token);
+        localStorage.setItem('socialpulse_user', JSON.stringify(data.user));
+        updateAuthUI();
+        if (authModal) authModal.style.display = 'none';
+        showToast(`Welcome back, ${data.user.name}!`, 'success');
+      } else {
+        showToast(data.error || 'Authentication failed', 'error');
+      }
+    } catch (err) {
+      showToast(`Network error: ${err.message}`, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign In';
+    }
+  };
+}
+
+updateAuthUI();

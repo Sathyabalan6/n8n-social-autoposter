@@ -147,6 +147,101 @@ assert.strictEqual(repliedTask.reply_text, 'Yes, fully compatible!');
 db.deleteEngagementTask(taskId);
 console.log('   ✓ Actionable task creation, reply state, and dismissal passed');
 
+// --- 8. ENTERPRISE AUTH, PASSWORDS & RBAC TESTS ---
+console.log('\n8. Testing Enterprise Auth, Password Hashing & RBAC:');
+const { hashPassword, verifyPassword } = require('../src/crypto');
+const { generateToken, verifyToken, hasMinimumRole, ROLES } = require('../src/auth');
+
+const pass = 'SuperSecurePass2026!';
+const hashed = hashPassword(pass);
+assert(hashed.startsWith('scrypt$'), 'Hash format must start with scrypt$');
+assert.strictEqual(verifyPassword(pass, hashed), true, 'Valid password verification must succeed');
+assert.strictEqual(verifyPassword('WrongPass', hashed), false, 'Invalid password verification must fail');
+console.log('   ✓ Scrypt password hashing & timing-safe verification passed');
+
+const testUser = { id: 42, email: 'lead@agency.com', role: ROLES.ADMIN, client_id: 2 };
+const token = generateToken(testUser);
+assert(token && typeof token === 'string', 'JWT token must be a string');
+const decoded = verifyToken(token);
+assert.strictEqual(decoded.sub, 42, 'Decoded user ID must match');
+assert.strictEqual(decoded.role, ROLES.ADMIN, 'Decoded role must match');
+assert.strictEqual(hasMinimumRole(ROLES.OWNER, ROLES.ADMIN), true, 'OWNER exceeds ADMIN hierarchy');
+assert.strictEqual(hasMinimumRole(ROLES.VIEWER, ROLES.ADMIN), false, 'VIEWER does not meet ADMIN hierarchy');
+console.log('   ✓ JWT signing, verification, and RBAC hierarchy passed');
+
+// --- 9. ZOD REQUEST SCHEMA VALIDATION TESTS ---
+console.log('\n9. Testing Zod Request Validation Schemas:');
+const { loginSchema, createClientSchema, queueRuleSchema } = require('../src/validation/schemas');
+
+const validLogin = loginSchema.safeParse({ email: 'user@domain.com', password: 'StrongPassword123' });
+assert.strictEqual(validLogin.success, true, 'Valid login schema should succeed');
+
+const invalidLogin = loginSchema.safeParse({ email: 'not-an-email', password: 'short' });
+assert.strictEqual(invalidLogin.success, false, 'Invalid login schema should fail');
+
+const validColor = createClientSchema.safeParse({ name: 'Client X', color_code: '#10B981' });
+assert.strictEqual(validColor.success, true, 'Valid hex color must succeed');
+
+const invalidColor = createClientSchema.safeParse({ name: 'Client X', color_code: 'blue' });
+assert.strictEqual(invalidColor.success, false, 'Non-hex color must fail');
+
+const validQueueRule = queueRuleSchema.safeParse({ iso_weekday: 5, local_time: '18:30' });
+assert.strictEqual(validQueueRule.success, true, 'Valid queue rule format must succeed');
+console.log('   ✓ Strict schema validation & input sanitization passed');
+
+// --- 10. IDEMPOTENCY KEY TESTS ---
+console.log('\n10. Testing Idempotency Storage:');
+const testKey = 'idem-key-abc-123';
+db.saveIdempotencyKey(testKey, 101, { success: true, cached: true }, 3600);
+const cachedResult = db.getIdempotencyKey(testKey);
+assert(cachedResult !== null, 'Saved idempotency key must be retrievable');
+assert.strictEqual(cachedResult.post_id, 101, 'Cached post ID must match');
+assert.strictEqual(cachedResult.response.cached, true, 'Cached response payload must match');
+console.log('   ✓ Idempotency caching & duplicate post prevention passed');
+
+// --- 11. AUDIT LOGGING TESTS ---
+console.log('\n11. Testing Immutable Audit Logging:');
+db.logAudit({
+  user_id: 1,
+  client_id: 1,
+  action: 'TEST_AUDIT_ACTION',
+  entity_type: 'POST',
+  entity_id: '999',
+  metadata: { note: 'CI audit verification' }
+});
+const auditLogs = db.getAuditLogs(1, 10);
+assert(auditLogs.length > 0, 'Audit logs must return recorded actions');
+const testLog = auditLogs.find((l) => l.action === 'TEST_AUDIT_ACTION');
+assert(testLog, 'Recorded audit action must be present in log query');
+console.log('   ✓ Immutable audit logging & querying passed');
+
+// --- 12. GDPR COMPLIANCE TESTS (DSAR & ERASURE) ---
+console.log('\n12. Testing GDPR DSAR Export & Right to Erasure:');
+const gdprClient = db.createClient('GDPR Test Client', '#EF4444');
+const exported = db.exportClientData(gdprClient.id);
+assert(exported !== null, 'Data export for client must return structured payload');
+assert.strictEqual(exported.client.id, gdprClient.id, 'Exported client ID must match');
+
+const erased = db.eraseClientData(gdprClient.id);
+assert.strictEqual(erased, true, 'Client data erasure must complete');
+const clientAfterErasure = db.getClients().find((c) => c.id === gdprClient.id);
+assert.strictEqual(clientAfterErasure, undefined, 'Client must be completely erased from database');
+console.log('   ✓ GDPR DSAR Export and Right to Erasure cascade passed');
+
+// --- 13. EXTERNAL API CIRCUIT BREAKER TESTS ---
+console.log('\n13. Testing External Platform Circuit Breakers:');
+const { circuitBreaker, CIRCUIT_STATES } = require('../src/queue/circuit-breaker');
+
+assert.strictEqual(circuitBreaker.isOpen('mock_platform'), false, 'Initial circuit must be CLOSED');
+circuitBreaker.recordFailure('mock_platform', new Error('API 500 error'));
+circuitBreaker.recordFailure('mock_platform', new Error('API 500 error'));
+circuitBreaker.recordFailure('mock_platform', new Error('API 500 error'));
+assert.strictEqual(circuitBreaker.isOpen('mock_platform'), true, 'Circuit must trip to OPEN after 3 failures');
+
+const circuitStatus = circuitBreaker.getStatus();
+assert.strictEqual(circuitStatus.mock_platform.state, CIRCUIT_STATES.OPEN, 'Circuit state must reflect OPEN');
+console.log('   ✓ External API failure threshold & circuit breaker tripping passed');
+
 console.log('\n========================================');
 console.log('🎉 ALL CI TESTS PASSED SUCCESSFULLY! (100%)');
 console.log('========================================\n');

@@ -1,0 +1,75 @@
+---
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: socialpulse-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - BASE_URL=http://localhost:3000
+      - ENCRYPTION_SECRET=production_vault_secret_min_32_characters_long_12345
+      - JWT_SECRET=jwt_super_secret_signing_key_for_tokens_2026
+      - DATABASE_URL=postgresql://socialpulse:pulse_secret_pass@postgres:5432/socialpulse_db
+      - REDIS_URL=redis://redis:6379
+      - ADMIN_EMAIL=admin@socialpulse.local
+      - ADMIN_PASSWORD=SocialPulseAdmin2026!
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - app-uploads:/app/public/uploads
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: socialpulse-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=socialpulse
+      - POSTGRES_PASSWORD=pulse_secret_pass
+      - POSTGRES_DB=socialpulse_db
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./src/db/postgres-schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U socialpulse -d socialpulse_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: socialpulse-redis
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg-data:
+  redis-data:
+  app-uploads:

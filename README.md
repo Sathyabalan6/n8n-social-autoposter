@@ -1,94 +1,93 @@
-# 🚀 SocialPulse Studio — Multi-Platform Social Media Auto-Poster & Growth Engine
+# 🚀 SocialPulse Studio — Enterprise Social Media Publishing & Scheduling Platform
 
-A modern, self-hosted multi-channel social media publishing engine and visual editorial workbench for teams and agencies. Publish and schedule content across **YouTube (Videos & Shorts), X (Twitter), LinkedIn, Instagram, Threads, and Facebook** with **ZERO Docker**, **ZERO external database servers**, and **ZERO recurring monthly fees**.
+SocialPulse Studio is an enterprise-grade, self-hosted multi-channel social media publishing engine and visual editorial workbench built for marketing teams and agencies. Publish and schedule content across **YouTube (Videos & Shorts), X (Twitter), LinkedIn, Instagram, Threads, and Facebook** with complete data ownership.
 
-Unlike traditional social media schedulers that act as "dumb pipes" (stripping reach parameters and triggering algorithmic down-ranking), **SocialPulse Studio is built algorithm-first**, implementing deep reach knobs, automatic link decoupling, and neural-network engagement multipliers.
+Built with an **architecture-first engineering philosophy**, SocialPulse Studio provides deterministic platform compilation, outbound link decoupling, media transcoding, granular Role-Based Access Control (RBAC), and dual persistence modes (embedded SQLite for local development or PostgreSQL with Row-Level Security for enterprise cloud clusters).
 
 ---
 
-## 🌟 Key Capabilities
+## 🌟 Enterprise Highlights
 
-1. **Anti-Penalty Link Decoupling (The First-Comment Engine):**
-   - External links in main post copy cut organic reach by up to **80% on X** and **40% on LinkedIn**.
-   - SocialPulse automatically detects external URLs in body copy and decouples them into an automated **First Comment / Threaded Reply**, dispatched 5 seconds after publication.
-2. **Deep Algorithmic Reach Knobs:**
-   - **YouTube:** Custom thumbnails (`thumbnails.set` up to 2MB API limit), Topic Category taxonomy (`snippet.categoryId`), COPPA compliance (`selfDeclaredMadeForKids`), AI disclosure (`containsSyntheticMedia`), and notification shielding (`notifySubscribers=false`).
-   - **X (Twitter):** Media Alt-Text injection (`metadata/create.json`), SimClusters & Heavy Ranker alignment (`reply_settings: "everyone"` to preserve 150x reply weights), and threaded replies (`in_reply_to_tweet_id`).
-   - **LinkedIn:** Swipeable PDF document carousels (`urn:li:document`), forced comment velocity (`isReshareDisabledByAuthor: true`), and comment-edge links.
-   - **Instagram:** Reels format routing (`media_type: "REELS"`), custom audio indexing (`audio_name`), and Explore-only distribution testing (`trial_params`).
-   - **Meta Threads:** Relational quote chains (`quote_post_id`) and asymmetric quota utilization (1,000 replies/day).
-3. **Interactive Editorial Calendar (Month & Week Views):**
-   - Full drag-and-drop calendar planning. Drag a post to any day to reschedule it instantly while preserving its scheduled time.
-   - Quick-schedule `+` button on any day cell pre-fills the composer with that date.
-   - Post detail modal to preview copy, media, status, and channels.
-4. **Embedded FFmpeg Media & Transcoding Engine:**
-   - Bundles cross-platform `ffmpeg-static` and `ffprobe-static` binaries directly.
-   - **Automatic Inspection:** Real-time aspect ratio, resolution, duration, and codec probing.
-   - **Smart Vertical Conversion:** One-click conversion of 16:9 horizontal videos to 9:16 vertical videos with blurred background padding for YouTube Shorts and Instagram Reels.
-   - **Poster Frame Generator:** Automatic high-resolution thumbnail extraction.
-5. **Smart Recurring Queue Slots ("Buffer-Style Scheduling"):**
-   - Define weekly recurring schedules per client (e.g. *Mon 09:30 AM, Wed 14:00, Fri 10:00*).
-   - "Add to Queue" dynamically projects future time slots using pure Node.js native `Intl.DateTimeFormat` with automatic Daylight Saving Time (DST) awareness.
-6. **Client Review Gates & Passwordless Magic Links:**
-   - Agency-grade review workflow: junior creators draft content, and external clients approve/reject with one tap on mobile.
-   - Secured with HMAC-SHA256, 72-hour expiration, and single-use nonce nullification to prevent replay attacks.
-7. **Zero-Docker, Native Embedded Operations:**
-   - Powered by Node.js 24 and embedded **`node:sqlite`** running in enterprise **WAL (Write-Ahead Logging)** mode with 5-second busy timeout and atomic worker lease locks.
-   - All state, queues, and AES-256-GCM encrypted credentials live in a single local `posts.sqlite` file.
-8. **Client Workspace Isolation & Vault:**
-   - Multi-tenant client workspace partitioning with encrypted credential storage.
+1. **Deterministic Multi-Platform Compilation (`compiler.js`):**
+   - **Accurate Counting:** Native `Intl.Segmenter` grapheme counting and UTF-8 byte bounds prevent silent API rejections.
+   - **Weighted Character Accounting:** Models X's 280-character limit with 23-character fixed URL weighting.
+   - **Anti-Penalty Link Decoupling:** Automatically extracts outbound URLs and schedules them as an automated **First Comment / Threaded Reply**, preventing feed ranking visibility penalties on X and LinkedIn.
+   - **Platform-Specific Gates:** YouTube Category ID resolution, COPPA compliance, AI synthetic media transparency flags, Instagram Reels trial mode, and LinkedIn PDF document carousels.
+
+2. **Enterprise Security & Cryptographic Vault (`crypto.js`):**
+   - **AES-256-GCM Envelope Encryption (SPV2):** All OAuth tokens and API secrets are encrypted at rest with random 16-byte salts generated per record and 310,000 PBKDF2-HMAC-SHA256 iterations (OWASP standard).
+   - **Password Security:** User passwords hashed using `scrypt` with 16-byte random salts and timing-safe verification.
+   - **Role-Based Access Control (RBAC):** 4-tier hierarchy (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`) with strict tenant data isolation (Anti-IDOR) preventing cross-workspace leakage.
+   - **Transport & DoS Protection:** Security headers via `helmet`, global rate limiting (300 req/min), and strict authentication limits (15 attempts/15 min).
+
+3. **High-Reliability Queue & Circuit Breakers (`scheduler.js`, `circuit-breaker.js`):**
+   - **Circuit Breakers:** Automatically detects repeated 5xx errors or HTTP 429 rate limits on external platform APIs, transitioning to `OPEN` state to prevent cascading API lockouts.
+   - **Exponential Backoff with Jitter:** Failed publishing attempts retry dynamically (`2^attempts * 60s + jitter`).
+   - **Dead-Letter Protection:** Automatically marks jobs as `failed` with diagnostic summaries after 5 attempts.
+   - **Graceful Shutdown:** Handles `SIGTERM`/`SIGINT`, draining active worker leases before terminating.
+
+4. **Dual-Mode Persistence (SQLite & PostgreSQL):**
+   - **Local / Standalone Mode:** Embedded Node 24 `node:sqlite` running in WAL mode with 5-second busy timeouts and atomic worker lease locks. Zero external database required.
+   - **Enterprise Cloud Mode:** Production PostgreSQL 16 schema (`postgres-schema.sql`) with **Row-Level Security (RLS)**, connection pooling (`pg.Pool`), and foreign key cascades.
+
+5. **Compliance & Audit Logging:**
+   - **Immutable Audit Trail:** Logs all critical actions (logins, post creation, edits, deletions) with actor IDs and IP addresses.
+   - **GDPR Endpoints:** Built-in Data Subject Access Request (DSAR) export (`GET /api/clients/:id/export`) and Right to Erasure (`DELETE /api/clients/:id/erase`).
+
+6. **Interactive Editorial Calendar & Transcoding:**
+   - Drag-and-drop calendar planning (Month & Week views) with atomic rescheduling (`PATCH /api/posts/:id/schedule`).
+   - Pure Node `Intl.DateTimeFormat` recurring slot calculation with automatic Daylight Saving Time (DST) awareness.
+   - Embedded static FFmpeg/FFprobe binaries for aspect ratio probing, 16:9 to 9:16 vertical blur conversion, and thumbnail extraction on isolated worker threads.
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### 1. Installation
 
 ```bash
+git clone https://github.com/Sathyabalan6/social-auto-post.git
+cd social-auto-post
 npm install
 ```
 
-### 2. Configure Environment (`.env`)
+### 2. Configure Environment
 
-Copy `.env.example` to `.env` and configure your credentials:
+Copy `.env.example` to `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Key environment settings:
+Set your configuration values:
 
 ```env
 PORT=3000
-ENCRYPTION_SECRET=your_super_secret_vault_encryption_key_here
+HOST=127.0.0.1
+BASE_URL=http://localhost:3000
 
-# YouTube OAuth
-GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:3000/auth/youtube/callback
+# Required: Minimum 32-character encryption key for credential vault
+ENCRYPTION_SECRET=your_super_secret_vault_encryption_key_here_min_32_chars
+JWT_SECRET=your_jwt_signing_secret_here_min_32_chars
 
-# X (Twitter) API v2
-X_API_KEY=your_x_api_key
-X_API_SECRET=your_x_api_secret
-X_ACCESS_TOKEN=your_x_access_token
-X_ACCESS_SECRET=your_x_access_token_secret
-
-# LinkedIn REST API
-LINKEDIN_ACCESS_TOKEN=your_linkedin_access_token
-LINKEDIN_PERSON_URN=urn:li:person:your_urn_here
+# Initial Administrator Seed
+ADMIN_EMAIL=admin@socialpulse.local
+ADMIN_PASSWORD=SocialPulseAdmin2026!
 ```
 
-*(Note: Credentials can also be configured per-client directly inside the web UI under **Workspaces & APIs**!)*
-
-### 3. Start the Server
+### 3. Run the Test Suite
 
 ```bash
+npm test
+```
+
+### 4. Start the Application
+
+```bash
+# Production mode
 npm start
-```
 
-For auto-reloading development mode:
-
-```bash
+# Development mode with auto-reload
 npm run dev
 ```
 
@@ -97,98 +96,97 @@ Open your browser at:
 
 ---
 
-## 🖥️ Workbench Views
+## 🐳 Docker Production Deployment
 
-1. **Composer & Algorithm Studio:**
-   - Left side: Multi-channel composer with platform override lenses.
-   - Master First-Comment & Outbound Link Anti-Penalty box.
-   - Deep reach drawers: YouTube Category/COPPA/AI knobs, X Alt-Text, LinkedIn Reshare Blocker, Instagram Reels Trial testing.
-   - Real-time video inspector and one-click `⚡ Auto-Convert 9:16` button.
-   - Right side: Authentic, pixel-perfect social mockup previews for each selected network.
-2. **Editorial Calendar:**
-   - Month and Week views showing all scheduled, published, and draft posts.
-   - HTML5 Drag-and-drop to reschedule posts across days while preserving the scheduled time.
-   - Click `+` on any date cell to schedule a post for that day.
-   - Click any post chip to view formatted copy, media attachments, or trigger quick editing.
-3. **Queue & History:**
-   - Searchable, client-scoped tabular view of all pending, published, and failed posts.
-   - Direct links to live published posts on YouTube, X, and LinkedIn.
-4. **Community Engagement Inbox:**
-   - Actionable task-based inbox aggregating follower questions and comments across connected channels.
-   - Send quick replies directly from the dashboard without switching native apps.
-5. **Workspaces & APIs:**
-   - Multi-tenant client workspace switcher.
-   - Encrypted credential vault for YouTube OAuth, X API v2 keys, LinkedIn tokens, and Meta credentials.
+Run the complete production stack (SocialPulse Studio + PostgreSQL 16 + Redis 7):
 
----
+```bash
+docker compose up -d
+```
 
-## 📁 Project Structure & Documentation
+Check service health:
 
-```text
-├── public/
-│   ├── index.html        # Unified studio workbench UI (Composer, Calendar, Queue, Vault)
-│   ├── app.js            # Reactive frontend controller & drag-and-drop calendar
-│   ├── styles.css        # High-contrast dark theme & responsive layouts
-│   └── uploads/          # Local media storage directory (24h auto-GC)
-├── src/
-│   ├── server.js         # Express HTTP server & REST API endpoints
-│   ├── db.js             # Native node:sqlite database operations & atomic job leases
-│   ├── compiler.js       # Deterministic platform validation & anti-penalty link decoupling
-│   ├── scheduler.js      # Background scheduler timer & media cleanup daemon
-│   ├── crypto.js         # AES-256-GCM encryption & PBKDF2 key derivation
-│   ├── media/
-│   │   └── transcoder.js # Embedded FFmpeg & FFprobe video engine (16:9 -> 9:16)
-│   └── platforms/
-│       ├── index.js      # Multi-platform Two-Stage dispatcher registry
-│       ├── youtube.js    # YouTube Data API v3, 50MB thumbnails & comment threads
-│       ├── x.js          # X API v2 (Tweets), alt-text & threaded replies
-│       └── linkedin.js   # LinkedIn REST Posts API, PDF carousels & comment edge
-├── ARCHITECTURE.md       # Technical design, concurrency & design choices rationale
-├── ROADMAP.md            # Single master roadmap & upcoming 80/20 sprints
-├── API_REFERENCE.md      # Complete REST API documentation & payload schemas
-├── DEPLOYMENT_GUIDE.md   # Production deployment & API developer portal setup
-├── CLIENT_REQUIREMENTS.md # Client onboarding questionnaire & intake form
-├── FINDINGS.md           # Deep research findings & anti-bot analysis archive
-├── SECURITY.md           # Security policy & vulnerability reporting
-├── CONTRIBUTING.md       # Contributing guidelines & code standards
-├── LICENSE               # Official MIT open-source license
-├── package.json
-└── test/
-    └── verify.js         # Automated CI test suite (100% pass)
+```bash
+# Liveness probe
+curl http://localhost:3000/healthz
+
+# Readiness probe
+curl http://localhost:3000/readyz
 ```
 
 ---
 
-## 📚 Detailed Documentation
+## 🏛️ System Architecture
 
-- **[Architecture & Design Decisions](ARCHITECTURE.md)**: Concurrency models, optimistic locking, security posture, and **why we chose this architecture**.
-- **[Master Roadmap & Sprints](ROADMAP.md)**: The single implementation roadmap and upcoming 80/20 feature sprints.
-- **[REST API Reference](API_REFERENCE.md)**: Full endpoint list, query parameters, request/response JSON schemas.
-- **[Production & Developer Setup Guide](DEPLOYMENT_GUIDE.md)**: How to configure developer apps for Google, Twitter, LinkedIn, and Meta, plus VPS deployment.
-- **[Client Onboarding Checklist](CLIENT_REQUIREMENTS.md)**: Ready-to-send intake questionnaire for brand permissions and API credentials.
-- **[Technical Research Archive](FINDINGS.md)**: Research sweeps on social APIs, anti-bot mechanisms, and unit economics.
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                               SocialPulse Studio Frontend                              │
+│   ┌────────────────────┬────────────────────┬─────────────────┬────────────────────┐   │
+│   │ Unified Composer   │ Editorial Calendar │ Queue & History │ Workspaces & APIs  │   │
+│   │ (Live Previews)    │ (Month/Week D&D)   │ (Status & Logs) │ (RBAC & Vault)     │   │
+│   └─────────┬──────────┴─────────┬──────────┴────────┬────────┴────────────┬───────┘   │
+└─────────────┼────────────────────┼───────────────────┼─────────────────────┼───────────┘
+              │                    │                   │                     │
+              ▼                    ▼                   ▼                     ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              Express Enterprise Gateway                                │
+│  • Security Headers (Helmet)               • Rate Limiting (express-rate-limit)        │
+│  • JWT Auth & RBAC (`auth.js`)             • Anti-IDOR Tenant Scope Guard              │
+│  • Zod Request Validation                  • Idempotency Engine (`Idempotency-Key`)    │
+└──────────────────────────┬─────────────────────────────────────────────────────────────┘
+                           │
+        ┌──────────────────┼─────────────────────────┐
+        ▼                  ▼                         ▼
+┌───────────────┐  ┌───────────────────────┐  ┌──────────────────────────────────────────┐
+│ Persistence   │  │ Media Engine          │  │ Reliable Background Scheduler Daemon     │
+│ • SQLite (WAL)│  │ • FFmpeg / FFprobe    │  │ (`scheduler.js`)                         │
+│ • PostgreSQL  │  │ • Worker Thread       │  │ • Atomic Worker Lease Locking            │
+│   with RLS    │  │   Isolation           │  │ • Exponential Backoff with Jitter        │
+│ • Audit Logs  │  │ • 16:9 -> 9:16 Blur   │  │ • Circuit Breakers (`circuit-breaker.js`)│
+│ • Vault SPV2  │  │ • 24h Automated GC    │  │ • Dead-Letter Queue (Max 5 attempts)     │
+└───────────────┘  └───────────────────────┘  └────────────────────┬─────────────────────┘
+                                                                   │
+                                                                   ▼
+                                              ┌──────────────────────────────────────────┐
+                                              │ Platform Adapters (`src/platforms`)      │
+                                              ├──────────────────────────────────────────┤
+                                              │ • YouTube Data API v3 (Proactive Refresh)│
+                                              │ • X / Twitter API v2 (Chunked & Alt-Text)│
+                                              │ • LinkedIn REST Posts (Doc Carousels)    │
+                                              │ • Meta Instagram Graph & Reels Trial     │
+                                              │ • Meta Threads Graph API                 │
+                                              │ • Meta Facebook Pages Graph API          │
+                                              └──────────────────────────────────────────┘
+```
 
 ---
 
-## ⚖️ Buffer vs. SocialPulse Studio
+## 🧪 Testing & Verification
 
-| Feature | Buffer (Commercial SaaS) | SocialPulse Studio |
-| :--- | :--- | :--- |
-| **Cost** | $6 to $12 / channel / mo | **$0 (Self-Hosted, No SaaS Fees)** |
-| **Data Privacy** | Cloud SaaS (Third-party servers) | **100% On-Premise & Encrypted** |
-| **Infrastructure** | Proprietary Cloud | **Native Node.js 24 + Embedded SQLite** |
-| **Link Anti-Penalty (First Comment)** | Paid Add-on (limited channels) | **Native Automated Decoupling (X, LinkedIn, IG, YT)** |
-| **Buffer-Style Recurring Queuing** | Proprietary queue slots | **Dynamic `Intl` DST-aware Queue Slots** |
-| **Client Approval Workflow** | Requires client paid account | **Single-Use HMAC-SHA256 Magic Links** |
-| **Community Inbox** | Paid add-on ($15/channel/mo) | **Actionable Task-Based Quick Responder** |
-| **YouTube Reach Knobs** | Basic Title/Desc only | **Categories, Custom thumbs, COPPA, AI flags, Notify shield** |
-| **X Heavy Ranker Knobs** | Basic text | **Alt-text injection, 150x reply settings locked** |
-| **LinkedIn Engagement Knobs** | Basic post | **PDF carousels, Disable-Reshare comment trigger** |
-| **Editorial Calendar** | Interactive drag-and-drop | **Interactive HTML5 drag-and-drop** |
-| **Media Transcoding** | Cloud transcoding queue | **Embedded FFmpeg blur-padding engine** |
+SocialPulse Studio includes an automated test suite verifying all 13 core subsystems:
+
+```bash
+npm test
+```
+
+Verification coverage includes:
+1. AES-256-GCM Envelope Encryption (SPV2) with dynamic salt
+2. Single-use HMAC-SHA256 tokens and timing-safe validation
+3. Compiler anti-penalty outbound link decoupling and category resolution
+4. Recurring dynamic queue slots projection across Daylight Saving Time shifts
+5. Database migrations, indexes, and constraints
+6. Platform dispatch registry and idempotency guards
+7. Time-series metrics snapshots and dual-snapshot analytics
+8. Actionable community inbox task states
+9. Scrypt password hashing and timing-safe verification
+10. JWT token signing, verification, and role hierarchy
+11. Zod request schema validation
+12. Immutable audit logging
+13. GDPR DSAR export and cascade erasure
+14. External API failure thresholds and circuit breaker tripping
 
 ---
 
 ## 📄 License
 
-ISC License. Open-source and free for personal, team, or commercial use.
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.

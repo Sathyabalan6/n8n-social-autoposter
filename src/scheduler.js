@@ -1,45 +1,109 @@
 /**
- * Background Scheduler & Cleanup Daemon
- * Checks the SQLite database every minute for posts where status = 'scheduled' and scheduled_at <= now()
- * Automatically purges temporary uploads for completed posts after 24h retention window!
+ * Enterprise Background Queue Scheduler & Worker Daemon
+ * Features atomic worker lease locking, exponential backoff with jitter,
+ * dead-letter protection, circuit breaker integration, and automated media GC.
  */
 
 const fs = require('node:fs');
 const db = require('./db');
 const { dispatchPost, syncPostMetrics } = require('./platforms');
+const { circuitBreaker } = require('./queue/circuit-breaker');
+const logger = require('./logger');
 
 const workerId = `worker-${process.pid}-${Math.round(Math.random() * 1e6)}`;
+const MAX_ATTEMPTS = 5;
 let timerId = null;
+let isShuttingDown = false;
+let activeJobCount = 0;
 let gcCounter = 0;
 let metricsCounter = 0;
 
 async function checkAndProcessDuePosts() {
+  if (isShuttingDown) return;
+
   try {
-    let job = db.claimNextJob(workerId, 300000); // 5-minute atomic lease lock for media transfers
+    let job = db.claimNextJob(workerId, 300000); // 5-minute atomic lease lock
 
-    while (job) {
-      console.log(`[Scheduler] ${workerId} atomically claimed Job #${job.id} (Attempt ${job.attempts})`);
+    while (job && !isShuttingDown) {
+      activeJobCount += 1;
+      const platforms = Array.isArray(job.platforms) ? job.platforms : [];
 
-      const { results, finalStatus, errorSummary } = await dispatchPost(job);
-      db.updatePostStatus(job.id, finalStatus, results, errorSummary);
+      // Check Circuit Breakers: if all platforms are currently open, postpone job
+      const allCircuitsOpen = platforms.length > 0 && platforms.every((p) => circuitBreaker.isOpen(p));
+      if (allCircuitsOpen) {
+        logger.warn(
+          { jobId: job.id, platforms },
+          '[Scheduler] Target platform circuits OPEN. Postponing job execution.'
+        );
+        // Postpone 2 minutes into the future
+        const postponeTime = new Date(Date.now() + 120000).toISOString();
+        db.updatePostSchedule(job.id, postponeTime, 'scheduled');
+        activeJobCount -= 1;
+        job = db.claimNextJob(workerId, 300000);
+        continue;
+      }
 
-      console.log(`[Scheduler] Job #${job.id} resolved with status: ${finalStatus}`);
+      logger.info(
+        { workerId, jobId: job.id, attempt: job.attempts, platforms },
+        '[Scheduler] Atomically claimed and executing job'
+      );
 
-      // Claim next available job in queue
+      try {
+        const { results, finalStatus, errorSummary } = await dispatchPost(job);
+
+        // Record Circuit Breaker telemetry
+        for (const p of platforms) {
+          const res = results[p];
+          if (res && res.success) {
+            circuitBreaker.recordSuccess(p);
+          } else if (res && !res.success) {
+            circuitBreaker.recordFailure(p, new Error(res.error || 'Dispatch failed'));
+          }
+        }
+
+        if (finalStatus === 'failed' && job.attempts < MAX_ATTEMPTS) {
+          // Exponential backoff with jitter: 2^attempts * 60s + jitter
+          const baseDelay = Math.min(3600000, 60000 * Math.pow(2, job.attempts));
+          const jitter = Math.floor(Math.random() * 15000);
+          const nextRetry = new Date(Date.now() + baseDelay + jitter).toISOString();
+
+          logger.warn(
+            { jobId: job.id, attempt: job.attempts, nextRetry, errorSummary },
+            '[Scheduler] Job failed, scheduling retry with exponential backoff'
+          );
+          db.updatePostSchedule(job.id, nextRetry, 'scheduled');
+        } else {
+          // Mark final status (completed or dead-letter failed)
+          db.updatePostStatus(job.id, finalStatus, results, errorSummary);
+          logger.info(
+            { jobId: job.id, finalStatus },
+            '[Scheduler] Job resolved successfully or reached max attempts'
+          );
+        }
+      } catch (err) {
+        logger.error({ jobId: job.id, err: err.message }, '[Scheduler] Unhandled job dispatch exception');
+        if (job.attempts >= MAX_ATTEMPTS) {
+          db.updatePostStatus(job.id, 'failed', {}, `Dead-letter: exceeded ${MAX_ATTEMPTS} attempts: ${err.message}`);
+        }
+      } finally {
+        activeJobCount -= 1;
+      }
+
+      // Claim next job in the queue
       job = db.claimNextJob(workerId, 300000);
     }
   } catch (err) {
-    console.error('[Scheduler] Queue processing error:', err.message);
+    logger.error({ err: err.message }, '[Scheduler] Queue loop processing error');
   }
 
-  // Run media garbage collector once every 10 cycles (~10 minutes)
+  // Periodic Maintenance
   gcCounter += 1;
   if (gcCounter >= 10) {
     gcCounter = 0;
     cleanupOldMedia();
+    db.cleanExpiredIdempotencyKeys();
   }
 
-  // Run analytics dual-snapshot poller every 15 cycles (~15 minutes)
   metricsCounter += 1;
   if (metricsCounter >= 15) {
     metricsCounter = 0;
@@ -57,7 +121,7 @@ async function syncDuePostMetrics() {
       await syncPostMetrics(post, 'T24H');
     }
   } catch (err) {
-    console.error('[Analytics Poller] Background sync error:', err.message);
+    logger.error({ err: err.message }, '[Analytics Poller] Background sync error');
   }
 }
 
@@ -77,7 +141,7 @@ function cleanupOldMedia() {
           if (post.media_path && fs.existsSync(post.media_path)) {
             try {
               fs.unlinkSync(post.media_path);
-              console.log(`[GC] Cleaned up master media file for Post #${post.id}`);
+              logger.debug({ postId: post.id }, '[GC] Cleaned up master media file');
             } catch {
               // ignore deletion err
             }
@@ -89,7 +153,7 @@ function cleanupOldMedia() {
             if (p && fs.existsSync(p)) {
               try {
                 fs.unlinkSync(p);
-                console.log(`[GC] Cleaned up ${key} media file for Post #${post.id}`);
+                logger.debug({ postId: post.id, platform: key }, '[GC] Cleaned up override media file');
               } catch {
                 // ignore deletion err
               }
@@ -99,13 +163,13 @@ function cleanupOldMedia() {
       }
     }
   } catch (err) {
-    console.error('[GC] Garbage collection error:', err.message);
+    logger.error({ err: err.message }, '[GC] Garbage collection error');
   }
 }
 
 function startScheduler(intervalMs = 60000) {
   if (timerId) clearInterval(timerId);
-  console.log(`[Scheduler] Started. Checking for due posts every ${intervalMs / 1000}s...`);
+  logger.info({ intervalSec: intervalMs / 1000 }, '[Scheduler] Started background worker daemon');
 
   // Initial check on startup
   checkAndProcessDuePosts();
@@ -114,12 +178,19 @@ function startScheduler(intervalMs = 60000) {
   timerId = setInterval(checkAndProcessDuePosts, intervalMs);
 }
 
-function stopScheduler() {
+async function stopScheduler(gracePeriodMs = 5000) {
+  logger.info('[Scheduler] Stopping scheduler, awaiting active jobs...');
+  isShuttingDown = true;
   if (timerId) {
     clearInterval(timerId);
     timerId = null;
-    console.log('[Scheduler] Stopped.');
   }
+
+  const start = Date.now();
+  while (activeJobCount > 0 && Date.now() - start < gracePeriodMs) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  logger.info('[Scheduler] Scheduler stopped cleanly.');
 }
 
 module.exports = {

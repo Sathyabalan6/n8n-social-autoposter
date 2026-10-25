@@ -1,18 +1,163 @@
-# 📡 SocialPulse Studio — REST API Reference
+# 📡 SocialPulse Studio — REST API Reference (v2.0)
 
 This document provides complete technical specifications for all REST endpoints exposed by SocialPulse Studio.
 
 ---
 
-## Base URL
+## Authentication & Headers
 
-```text
-http://localhost:3000
+Protected endpoints require a JSON Web Token (JWT) in the `Authorization` header:
+
+```http
+Authorization: Bearer <token>
+```
+
+For idempotent post creation, pass the optional `Idempotency-Key` header:
+
+```http
+Idempotency-Key: <unique-uuid-or-hash>
 ```
 
 ---
 
-## 1. System & Taxonomy Endpoints
+## 1. Health, Probes & Status
+
+### 1.1. Liveness Probe (Kubernetes / Orchestrator)
+
+```http
+GET /healthz
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "healthy",
+  "uptime": 124.5,
+  "timestamp": "2026-10-25T15:30:00.000Z"
+}
+```
+
+### 1.2. Readiness Probe (Dependencies & Circuit Breakers)
+
+```http
+GET /readyz
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "ready",
+  "database": {
+    "sqlite": "connected",
+    "postgres": { "configured": false, "status": "disabled" }
+  },
+  "storage": {
+    "cloud_s3_configured": true
+  },
+  "circuit_breakers": {
+    "x": { "state": "CLOSED", "failures": 0, "lastFailure": null }
+  },
+  "timestamp": "2026-10-25T15:30:00.000Z"
+}
+```
+
+### 1.3. Platform Status & Topology
+
+```http
+GET /api/status?clientId={clientId}
+```
+
+---
+
+## 2. Authentication & User Management
+
+### 2.1. User Login
+
+```http
+POST /api/auth/login
+```
+
+**Request Body:**
+```json
+{
+  "email": "admin@socialpulse.local",
+  "password": "SocialPulseAdmin2026!"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": 1,
+    "email": "admin@socialpulse.local",
+    "name": "System Administrator",
+    "role": "OWNER",
+    "client_id": 1
+  }
+}
+```
+
+### 2.2. Register User (Requires `OWNER` or `ADMIN`)
+
+```http
+POST /api/auth/register
+```
+
+**Request Body:**
+```json
+{
+  "email": "editor@agency.com",
+  "password": "StrongPassword123!",
+  "name": "Jane Editor",
+  "role": "EDITOR",
+  "client_id": 1
+}
+```
+
+### 2.3. Current User Profile
+
+```http
+GET /api/auth/me
+```
+
+### 2.4. List Workspace Users
+
+```http
+GET /api/users?clientId={clientId}
+```
+
+---
+
+## 3. Compliance & Audit Logs
+
+### 3.1. Retrieve Workspace Audit Logs
+
+```http
+GET /api/clients/:id/audit?limit=50
+```
+
+### 3.2. GDPR Data Subject Access Request (DSAR) Export
+
+```http
+GET /api/clients/:id/export
+```
+
+**Response (200 OK):** Returns structured JSON containing all client data, account metadata, posts, engagement tasks, and users.
+
+### 3.3. GDPR Right to Erasure
+
+```http
+DELETE /api/clients/:id/erase
+```
+
+**Response (200 OK):** Permanently cascades and deletes all tenant data across all tables.
+
+---
+
+## 4. System & Taxonomy Endpoints
 
 ### 1.1. Health Check & Platform Status
 

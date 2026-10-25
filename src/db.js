@@ -1,6 +1,7 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const { encrypt, decrypt } = require('./crypto');
+const logger = require('./logger');
 
 const dbPath = path.join(__dirname, '..', 'posts.sqlite');
 const db = new DatabaseSync(dbPath);
@@ -13,7 +14,7 @@ try {
     PRAGMA busy_timeout = 5000;
   `);
 } catch (e) {
-  console.warn('[DB] Pragma initialization warning:', e.message);
+  logger.warn({ err: e.message }, '[DB] Pragma initialization warning');
 }
 
 // 1. Core Agency Tables: clients, social_accounts, posts, settings
@@ -127,6 +128,38 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     encrypted INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL DEFAULT 1,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'EDITOR',
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    client_id INTEGER,
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT,
+    metadata TEXT,
+    ip_address TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS idempotency_keys (
+    idempotency_key TEXT PRIMARY KEY,
+    post_id INTEGER,
+    response_payload TEXT,
+    created_at TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
   );
 `);
 
@@ -336,6 +369,59 @@ const stmtMarkTaskReplied = db.prepare(`
 const stmtDeleteTask = db.prepare(`
   DELETE FROM engagement_tasks WHERE id = ?
 `);
+
+// Users Statements
+const stmtInsertUser = db.prepare(`
+  INSERT INTO users (client_id, email, password_hash, role, name, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
+const stmtGetUserByEmail = db.prepare(`SELECT * FROM users WHERE email = ?`);
+const stmtGetUserById = db.prepare(`SELECT id, client_id, email, role, name, created_at, updated_at FROM users WHERE id = ?`);
+const stmtGetUsersByClient = db.prepare(`SELECT id, client_id, email, role, name, created_at, updated_at FROM users WHERE client_id = ? ORDER BY id ASC`);
+const stmtCountUsers = db.prepare(`SELECT COUNT(*) as count FROM users`);
+const stmtUpdateUserRole = db.prepare(`UPDATE users SET role = ?, updated_at = ? WHERE id = ?`);
+const stmtDeleteUser = db.prepare(`DELETE FROM users WHERE id = ?`);
+
+// Audit Logs Statements
+const stmtInsertAudit = db.prepare(`
+  INSERT INTO audit_logs (user_id, client_id, action, entity_type, entity_id, metadata, ip_address, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const stmtGetAuditLogs = db.prepare(`
+  SELECT a.*, u.email as user_email, u.name as user_name 
+  FROM audit_logs a 
+  LEFT JOIN users u ON a.user_id = u.id 
+  WHERE a.client_id = ? 
+  ORDER BY a.id DESC 
+  LIMIT ?
+`);
+
+// Idempotency Keys Statements
+const stmtGetIdempotency = db.prepare(`SELECT * FROM idempotency_keys WHERE idempotency_key = ?`);
+const stmtInsertIdempotency = db.prepare(`
+  INSERT INTO idempotency_keys (idempotency_key, post_id, response_payload, created_at, expires_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(idempotency_key) DO UPDATE SET
+    post_id = excluded.post_id,
+    response_payload = excluded.response_payload,
+    expires_at = excluded.expires_at
+`);
+const stmtCleanExpiredIdempotency = db.prepare(`DELETE FROM idempotency_keys WHERE expires_at < ?`);
+
+// Seed default Admin user if none exists
+try {
+  const userCount = stmtCountUsers.get()?.count || 0;
+  if (userCount === 0) {
+    const { hashPassword } = require('./crypto');
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@socialpulse.local';
+    const adminPass = process.env.ADMIN_PASSWORD || 'SocialPulseAdmin2026!';
+    const now = new Date().toISOString();
+    stmtInsertUser.run(1, adminEmail.toLowerCase(), hashPassword(adminPass), 'OWNER', 'System Administrator', now, now);
+    logger.info({ email: adminEmail }, '[Security] Seeded initial OWNER account');
+  }
+} catch (e) {
+  logger.warn({ err: e.message }, '[DB] User auto-seed warning');
+}
 
 module.exports = {
   db,
@@ -665,5 +751,107 @@ module.exports = {
     stmtMarkTaskReplied.run(replyText, now, id);
     return true;
   },
-  deleteEngagementTask: (id) => stmtDeleteTask.run(id)
+  deleteEngagementTask: (id) => stmtDeleteTask.run(id),
+  // Users API
+  createUser: (user) => {
+    const now = new Date().toISOString();
+    const res = stmtInsertUser.run(
+      user.client_id || 1,
+      user.email.toLowerCase().trim(),
+      user.password_hash,
+      user.role || 'EDITOR',
+      user.name || '',
+      now,
+      now
+    );
+    return {
+      id: res.lastInsertRowid,
+      client_id: user.client_id || 1,
+      email: user.email.toLowerCase().trim(),
+      role: user.role || 'EDITOR',
+      name: user.name || '',
+      created_at: now
+    };
+  },
+  getUserByEmail: (email) => stmtGetUserByEmail.get(email.toLowerCase().trim()),
+  getUserById: (id) => stmtGetUserById.get(id),
+  getUsersByClient: (clientId) => stmtGetUsersByClient.all(clientId),
+  updateUserRole: (id, role) => {
+    const now = new Date().toISOString();
+    stmtUpdateUserRole.run(role, now, id);
+    return true;
+  },
+  deleteUser: (id) => stmtDeleteUser.run(id),
+  // Audit Logging API
+  logAudit: (entry) => {
+    const now = new Date().toISOString();
+    stmtInsertAudit.run(
+      entry.user_id || null,
+      entry.client_id || 1,
+      entry.action,
+      entry.entity_type,
+      String(entry.entity_id || ''),
+      entry.metadata ? JSON.stringify(entry.metadata) : null,
+      entry.ip_address || '',
+      now
+    );
+  },
+  getAuditLogs: (clientId, limit = 50) => stmtGetAuditLogs.all(clientId, limit),
+  // Idempotency API
+  getIdempotencyKey: (key) => {
+    const row = stmtGetIdempotency.get(key);
+    if (!row) return null;
+    if (row.expires_at < Date.now()) {
+      return null;
+    }
+    return {
+      post_id: row.post_id,
+      response: safeJsonParse(row.response_payload, null)
+    };
+  },
+  saveIdempotencyKey: (key, postId, responsePayload, ttlSeconds = 86400) => {
+    const now = new Date().toISOString();
+    const expiresAt = Date.now() + ttlSeconds * 1000;
+    stmtInsertIdempotency.run(key, postId, JSON.stringify(responsePayload), now, expiresAt);
+  },
+  cleanExpiredIdempotencyKeys: () => {
+    stmtCleanExpiredIdempotency.run(Date.now());
+  },
+  // GDPR Compliance API (DSAR & Right to Erasure)
+  exportClientData: (clientId) => {
+    const client = stmtGetClients.all().find((c) => c.id === clientId);
+    if (!client) return null;
+    const accounts = stmtGetAccountsByClient.all(clientId).map((a) => ({
+      ...a,
+      encrypted_tokens: '[REDACTED FOR EXPORT]'
+    }));
+    const posts = stmtGetByClient.all(clientId);
+    const tasks = stmtGetAllTasksByClient.all(clientId);
+    const users = stmtGetUsersByClient.all(clientId);
+    return {
+      client,
+      accounts,
+      posts,
+      engagement_tasks: tasks,
+      users,
+      exported_at: new Date().toISOString()
+    };
+  },
+  eraseClientData: (clientId) => {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare('DELETE FROM audit_logs WHERE client_id = ?').run(clientId);
+      db.prepare('DELETE FROM engagement_tasks WHERE client_id = ?').run(clientId);
+      db.prepare('DELETE FROM queue_rules WHERE client_id = ?').run(clientId);
+      db.prepare('DELETE FROM posts WHERE client_id = ?').run(clientId);
+      db.prepare('DELETE FROM social_accounts WHERE client_id = ?').run(clientId);
+      db.prepare('DELETE FROM users WHERE client_id = ?').run(clientId);
+      stmtDeleteClient.run(clientId);
+      db.exec('COMMIT');
+      return true;
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
 };

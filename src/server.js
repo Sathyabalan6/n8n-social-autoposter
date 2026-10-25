@@ -2,16 +2,33 @@ require('dotenv').config();
 const path = require('node:path');
 const fs = require('node:fs');
 const express = require('express');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 
 const db = require('./db');
+const logger = require('./logger');
 const { compilePost, YOUTUBE_CATEGORIES, calculateNextAvailableSlot } = require('./compiler');
 const { dispatchPost, syncPostMetrics, syncInboundComments, replyToEngagementTask } = require('./platforms');
 const { getAuthUrl, handleAuthCallback, getStoredTokens } = require('./platforms/youtube');
 const { inspectMedia, transcodeToVerticalInWorker, extractThumbnail } = require('./media/transcoder');
 const { isCloudStorageConfigured, generatePresignedUploadUrl } = require('./media/storage');
 const { generateApprovalToken, validateApprovalToken } = require('./crypto');
-const { startScheduler } = require('./scheduler');
+const { startScheduler, stopScheduler } = require('./scheduler');
+const { authenticate, requireAuth, requireRole, enforceTenantScope } = require('./middleware/auth');
+const { validateBody } = require('./middleware/validate');
+const {
+  loginSchema,
+  registerSchema,
+  createClientSchema,
+  createAccountSchema,
+  reschedulePostSchema,
+  queueRuleSchema,
+  replyInboxSchema
+} = require('./validation/schemas');
+const { generateToken, verifyPassword, hashPassword, ROLES } = require('./auth');
+const { isPostgresConfigured, checkPostgresHealth, runPostgresMigrations } = require('./db/postgres');
+const { circuitBreaker } = require('./queue/circuit-breaker');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +38,33 @@ const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+
+// Security Headers via Helmet (with permissive script settings for local SPA dashboard)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+  })
+);
+
+// Global Rate Limiting: 300 requests per minute
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests from this IP, please try again shortly' }
+});
+app.use(globalLimiter);
+
+// Strict Authentication Limiter: 15 attempts per 15 minutes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many authentication attempts, please try again in 15 minutes' }
+});
 
 // Allowed safe extensions
 const ALLOWED_MIME_TYPES = new Set([
@@ -50,6 +94,7 @@ const upload = multer({
     }
   }
 });
+
 const uploadFields = upload.fields([
   { name: 'media', maxCount: 1 },
   { name: 'media_youtube', maxCount: 1 },
@@ -113,17 +158,58 @@ app.use((req, res, next) => {
   next();
 });
 
+// Global Token Authentication Middleware
+app.use(authenticate);
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// --- API ROUTES ---
+// ============================================================================
+// HEALTH & OBSERVABILITY PROBES (Kubernetes / Production Monitoring)
+// ============================================================================
 
-// 1. Health check & status
+// Liveness Probe: Verifies the process is alive and responsive
+app.get('/healthz', (_req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Readiness Probe: Verifies core database and storage dependencies
+app.get('/readyz', async (_req, res) => {
+  try {
+    const pgHealth = await checkPostgresHealth();
+    const storageConfigured = isCloudStorageConfigured();
+    const circuits = circuitBreaker.getStatus();
+
+    res.status(200).json({
+      status: 'ready',
+      database: {
+        sqlite: 'connected',
+        postgres: pgHealth
+      },
+      storage: {
+        cloud_s3_configured: storageConfigured
+      },
+      circuit_breakers: circuits,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'unready',
+      error: err.message
+    });
+  }
+});
+
+// Comprehensive Status & Platform Topology
 app.get('/api/status', (req, res) => {
   const clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
   const ytTokens = getStoredTokens(clientId);
   res.json({
     status: 'ok',
-    version: '1.1.0',
+    version: '2.0.0',
     platforms: {
       youtube: {
         configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
@@ -134,11 +220,115 @@ app.get('/api/status', (req, res) => {
       instagram: { configured: Boolean(process.env.META_ACCESS_TOKEN && process.env.INSTAGRAM_ACCOUNT_ID) },
       threads: { configured: Boolean(process.env.THREADS_ACCESS_TOKEN) },
       facebook: { configured: Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID) }
-    }
+    },
+    circuit_breakers: circuitBreaker.getStatus()
   });
 });
 
-// --- AGENCY CLIENTS & ACCOUNTS ROUTES ---
+// ============================================================================
+// AUTHENTICATION & RBAC ENDPOINTS
+// ============================================================================
+
+app.post('/api/auth/login', authLimiter, validateBody(loginSchema), (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = db.getUserByEmail(email);
+
+    if (!user || !verifyPassword(password, user.password_hash)) {
+      logger.warn({ email, ip: req.ip }, '[Auth] Failed login attempt');
+      return res.status(401).json({ success: false, error: 'Invalid email or password' });
+    }
+
+    const token = generateToken(user, '24h');
+    db.logAudit({
+      user_id: user.id,
+      client_id: user.client_id,
+      action: 'USER_LOGIN',
+      entity_type: 'USER',
+      entity_id: user.id,
+      ip_address: req.ip
+    });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        client_id: user.client_id
+      }
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, '[Auth] Login error');
+    res.status(500).json({ success: false, error: 'Authentication service error' });
+  }
+});
+
+app.post('/api/auth/register', authLimiter, validateBody(registerSchema), (req, res) => {
+  try {
+    // Only existing ADMIN or OWNER can register new users
+    if (req.user && req.user.role !== ROLES.OWNER && req.user.role !== ROLES.ADMIN) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Insufficient privileges to register accounts' });
+    }
+
+    const { email, password, name, role, client_id } = req.body;
+    const existing = db.getUserByEmail(email);
+    if (existing) {
+      return res.status(400).json({ success: false, error: 'A user with this email already exists' });
+    }
+
+    const passwordHash = hashPassword(password);
+    const newUser = db.createUser({
+      email,
+      password_hash: passwordHash,
+      name,
+      role: role || ROLES.EDITOR,
+      client_id: client_id || 1
+    });
+
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: client_id || 1,
+      action: 'USER_REGISTERED',
+      entity_type: 'USER',
+      entity_id: newUser.id,
+      metadata: { email, role: newUser.role },
+      ip_address: req.ip
+    });
+
+    res.json({ success: true, user: newUser });
+  } catch (err) {
+    logger.error({ err: err.message }, '[Auth] Registration error');
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  const user = db.getUserById(req.user.sub);
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User profile not found' });
+  }
+  res.json({ success: true, user });
+});
+
+app.get('/api/users', requireAuth, requireRole(ROLES.OWNER, ROLES.ADMIN), (req, res) => {
+  try {
+    const clientId = req.user.role === ROLES.OWNER && req.query.clientId
+      ? parseInt(req.query.clientId, 10)
+      : req.user.client_id;
+    const users = db.getUsersByClient(clientId);
+    res.json({ success: true, users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// AGENCY CLIENTS & ACCOUNTS ROUTES
+// ============================================================================
+
 app.get('/api/clients', (_req, res) => {
   try {
     const clients = db.getClients();
@@ -148,13 +338,19 @@ app.get('/api/clients', (_req, res) => {
   }
 });
 
-app.post('/api/clients', (req, res) => {
+app.post('/api/clients', validateBody(createClientSchema), (req, res) => {
   try {
     const { name, color_code } = req.body;
-    if (!name || !name.trim()) {
-      return res.status(400).json({ success: false, error: 'Client name is required' });
-    }
-    const client = db.createClient(name.trim(), color_code || '#3B82F6');
+    const client = db.createClient(name.trim(), color_code);
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: client.id,
+      action: 'CLIENT_CREATED',
+      entity_type: 'CLIENT',
+      entity_id: client.id,
+      metadata: { name },
+      ip_address: req.ip
+    });
     res.json({ success: true, client });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -163,14 +359,23 @@ app.post('/api/clients', (req, res) => {
 
 app.delete('/api/clients/:id', (req, res) => {
   try {
-    db.deleteClient(req.params.id);
+    const clientId = parseInt(req.params.id, 10);
+    db.deleteClient(clientId);
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: clientId,
+      action: 'CLIENT_DELETED',
+      entity_type: 'CLIENT',
+      entity_id: clientId,
+      ip_address: req.ip
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.get('/api/clients/:id/accounts', (req, res) => {
+app.get('/api/clients/:id/accounts', enforceTenantScope, (req, res) => {
   try {
     const accounts = db.getAccountsByClient(req.params.id);
     res.json({ success: true, accounts });
@@ -188,14 +393,20 @@ app.get('/api/accounts', (_req, res) => {
   }
 });
 
-app.post('/api/clients/:id/accounts', (req, res) => {
+app.post('/api/clients/:id/accounts', enforceTenantScope, validateBody(createAccountSchema), (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     const { platform, account_name, account_handle, tokens } = req.body;
-    if (!platform || !account_name) {
-      return res.status(400).json({ success: false, error: 'Platform and Account Name are required' });
-    }
     const id = db.saveAccountTokens(clientId, platform.toLowerCase(), account_name.trim(), account_handle || '', '', tokens || {});
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: clientId,
+      action: 'ACCOUNT_CONNECTED',
+      entity_type: 'SOCIAL_ACCOUNT',
+      entity_id: id,
+      metadata: { platform, account_name },
+      ip_address: req.ip
+    });
     res.json({ success: true, id });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -204,19 +415,28 @@ app.post('/api/clients/:id/accounts', (req, res) => {
 
 app.delete('/api/accounts/:id', (req, res) => {
   try {
-    db.deleteAccount(req.params.id);
+    const accountId = parseInt(req.params.id, 10);
+    db.deleteAccount(accountId);
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: req.user?.client_id || 1,
+      action: 'ACCOUNT_DELETED',
+      entity_type: 'SOCIAL_ACCOUNT',
+      entity_id: accountId,
+      ip_address: req.ip
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 1b. YouTube Categories Taxonomy
+// YouTube Categories Taxonomy
 app.get('/api/youtube/categories', (_req, res) => {
   res.json({ success: true, categories: YOUTUBE_CATEGORIES });
 });
 
-// 2. Live Validation & Preview compiler
+// Live Validation & Preview compiler
 app.post('/api/compile', (req, res) => {
   try {
     const compiled = compilePost(req.body);
@@ -226,7 +446,10 @@ app.post('/api/compile', (req, res) => {
   }
 });
 
-// --- MEDIA ENGINE & TRANSCODING ROUTES ---
+// ============================================================================
+// MEDIA ENGINE & TRANSCODING ROUTES
+// ============================================================================
+
 app.get('/api/media/storage-status', (_req, res) => {
   res.json({ success: true, configured: isCloudStorageConfigured() });
 });
@@ -323,9 +546,22 @@ app.post('/api/media/thumbnail', async (req, res) => {
   }
 });
 
-// 3. Create / Submit Post (Immediate or Scheduled)
+// ============================================================================
+// POSTS CRUD WITH IDEMPOTENCY & AUDIT LOGGING
+// ============================================================================
+
 app.post('/api/posts', uploadFields, async (req, res) => {
   try {
+    // 1. Idempotency Key Guard: Protect against duplicate submissions
+    const idempotencyKey = req.headers['idempotency-key'];
+    if (idempotencyKey) {
+      const cached = db.getIdempotencyKey(idempotencyKey);
+      if (cached && cached.response) {
+        logger.info({ idempotencyKey, postId: cached.post_id }, '[API] Idempotent replay hit');
+        return res.json(cached.response);
+      }
+    }
+
     const body = req.body;
     let platforms = [];
     if (typeof body.platforms === 'string') {
@@ -378,7 +614,8 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       }
     }
 
-    const clientId = body.client_id ? parseInt(body.client_id, 10) : 1;
+    // Anti-IDOR Client ID resolution
+    const clientId = req.user?.client_id || (body.client_id ? parseInt(body.client_id, 10) : 1);
 
     const postRecord = {
       ...compiled,
@@ -391,7 +628,6 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       linkedin_doc_path: liDocPath
     };
 
-    // Check if user chose "Save as Draft"
     if (body.action === 'draft') {
       postRecord.status = 'draft';
     } else {
@@ -401,7 +637,6 @@ app.post('/api/posts', uploadFields, async (req, res) => {
     const id = db.insertPost(postRecord);
     postRecord.id = id;
 
-    // 2. If immediate and not draft, dispatch and update status
     if (body.action !== 'draft' && !compiled.is_scheduled) {
       const { results, finalStatus, errorSummary } = await dispatchPost(postRecord);
       postRecord.status = finalStatus;
@@ -410,24 +645,42 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       db.updatePostStatus(id, finalStatus, results, errorSummary);
     }
 
-    res.json({
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: clientId,
+      action: 'POST_CREATED',
+      entity_type: 'POST',
+      entity_id: id,
+      metadata: { platforms, status: postRecord.status },
+      ip_address: req.ip
+    });
+
+    const responsePayload = {
       success: true,
       postId: id,
       post: {
         id,
         ...postRecord
       }
-    });
+    };
+
+    if (idempotencyKey) {
+      db.saveIdempotencyKey(idempotencyKey, id, responsePayload, 86400);
+    }
+
+    res.json(responsePayload);
   } catch (err) {
-    console.error('Error creating post:', err);
+    logger.error({ err: err.message }, '[API] Error creating post');
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 4. List all posts (Queue & History, optionally filtered by client)
+// List posts (Scaped by Client ID)
 app.get('/api/posts', (req, res) => {
   try {
-    const clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
+    const clientId = req.user?.role !== ROLES.OWNER && req.user?.client_id
+      ? req.user.client_id
+      : (req.query.clientId ? parseInt(req.query.clientId, 10) : null);
     const posts = db.getAllPosts(clientId);
     res.json({ success: true, posts });
   } catch (err) {
@@ -435,13 +688,17 @@ app.get('/api/posts', (req, res) => {
   }
 });
 
-// 5. Update / Edit post
+// Update / Edit post
 app.put('/api/posts/:id', uploadFields, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const existing = db.getPostById(id);
     if (!existing) {
       return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    if (req.user && req.user.role !== ROLES.OWNER && existing.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
     }
 
     const body = req.body;
@@ -513,38 +770,52 @@ app.put('/api/posts/:id', uploadFields, async (req, res) => {
       linkedin_doc_path: liDocPath
     });
 
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: existing.client_id,
+      action: 'POST_UPDATED',
+      entity_type: 'POST',
+      entity_id: id,
+      ip_address: req.ip
+    });
+
     res.json({ success: true, postId: id });
   } catch (err) {
-    console.error('Error updating post:', err);
+    logger.error({ err: err.message }, '[API] Error updating post');
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 5b. Reschedule post (Atomic for Calendar Drag-and-Drop)
-app.patch('/api/posts/:id/schedule', (req, res) => {
+// Atomic Drag-and-Drop Reschedule
+app.patch('/api/posts/:id/schedule', validateBody(reschedulePostSchema), (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { scheduled_at } = req.body;
-    if (!scheduled_at) {
-      return res.status(400).json({ success: false, error: 'scheduled_at is required' });
-    }
 
     const existing = db.getPostById(id);
     if (!existing) {
       return res.status(404).json({ success: false, error: 'Post not found' });
     }
 
-    // Safety Invariant: Never reschedule already completed posts to prevent duplicate broadcasts
     if (existing.status === 'completed') {
       return res.status(400).json({
         success: false,
-        error: 'Cannot reschedule a completed post. Please duplicate or create a new post to schedule again.'
+        error: 'Cannot reschedule a completed post. Duplicate or create a new post to schedule again.'
       });
     }
 
-    // Retain draft status if already draft; otherwise transition back to scheduled
     const newStatus = existing.status === 'draft' ? 'draft' : 'scheduled';
     db.updatePostSchedule(id, scheduled_at, newStatus);
+
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: existing.client_id,
+      action: 'POST_RESCHEDULED',
+      entity_type: 'POST',
+      entity_id: id,
+      metadata: { scheduled_at },
+      ip_address: req.ip
+    });
 
     res.json({ success: true, id, scheduled_at, status: newStatus });
   } catch (err) {
@@ -552,7 +823,32 @@ app.patch('/api/posts/:id/schedule', (req, res) => {
   }
 });
 
-// --- POST PERFORMANCE METRICS ENDPOINTS ---
+// Delete Post
+app.delete('/api/posts/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const post = db.getPostById(id);
+    if (post) {
+      db.deletePost(id);
+      db.logAudit({
+        user_id: req.user?.sub || null,
+        client_id: post.client_id,
+        action: 'POST_DELETED',
+        entity_type: 'POST',
+        entity_id: id,
+        ip_address: req.ip
+      });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// PERFORMANCE METRICS & ENGAGEMENT INBOX
+// ============================================================================
+
 app.get('/api/posts/:id/metrics', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -581,7 +877,6 @@ app.post('/api/posts/:id/sync-metrics', async (req, res) => {
   }
 });
 
-// --- COMMUNITY ENGAGEMENT INBOX ENDPOINTS ---
 app.get('/api/clients/:id/inbox', (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
@@ -594,18 +889,23 @@ app.get('/api/clients/:id/inbox', (req, res) => {
   }
 });
 
-app.post('/api/inbox/:id/reply', async (req, res) => {
+app.post('/api/inbox/:id/reply', validateBody(replyInboxSchema), async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
     const { reply_text, client_id } = req.body;
-    if (!reply_text || !reply_text.trim()) {
-      return res.status(400).json({ success: false, error: 'reply_text is required' });
-    }
 
     const task = db.getEngagementTaskById(taskId);
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' });
 
     const result = await replyToEngagementTask(task, reply_text.trim(), client_id);
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: task.client_id,
+      action: 'INBOX_REPLY_SENT',
+      entity_type: 'ENGAGEMENT_TASK',
+      entity_id: taskId,
+      ip_address: req.ip
+    });
     res.json({ success: true, taskId, result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -632,17 +932,10 @@ app.delete('/api/inbox/:id', (req, res) => {
   }
 });
 
-// 6. Delete post
-app.delete('/api/posts/:id', (req, res) => {
-  try {
-    db.deletePost(req.params.id);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+// ============================================================================
+// QUEUE RULES & SMART BUFFER-STYLE SLOTS
+// ============================================================================
 
-// --- QUEUE RULES & SMART BUFFER-STYLE SLOTS ---
 app.get('/api/clients/:id/queue-rules', (req, res) => {
   try {
     const rules = db.getQueueRules(req.params.id);
@@ -652,14 +945,11 @@ app.get('/api/clients/:id/queue-rules', (req, res) => {
   }
 });
 
-app.post('/api/clients/:id/queue-rules', (req, res) => {
+app.post('/api/clients/:id/queue-rules', validateBody(queueRuleSchema), (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     const { timezone, iso_weekday, local_time } = req.body;
-    if (!iso_weekday || !local_time) {
-      return res.status(400).json({ success: false, error: 'iso_weekday (1-7) and local_time (HH:mm) are required' });
-    }
-    const rule = db.createQueueRule(clientId, timezone || 'UTC', parseInt(iso_weekday, 10), String(local_time).trim());
+    const rule = db.createQueueRule(clientId, timezone, iso_weekday, local_time);
     res.json({ success: true, rule });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -690,7 +980,59 @@ app.get('/api/clients/:id/next-slot', (req, res) => {
   }
 });
 
-// --- CLIENT REVIEW GATES & SINGLE-USE MAGIC LINKS ---
+// ============================================================================
+// AUDIT LOGS & GDPR COMPLIANCE
+// ============================================================================
+
+app.get('/api/clients/:id/audit', requireAuth, requireRole(ROLES.OWNER, ROLES.ADMIN), (req, res) => {
+  try {
+    const clientId = parseInt(req.params.id, 10);
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
+    const logs = db.getAuditLogs(clientId, limit);
+    res.json({ success: true, logs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GDPR Data Subject Access Request (DSAR) Export
+app.get('/api/clients/:id/export', requireAuth, requireRole(ROLES.OWNER, ROLES.ADMIN), (req, res) => {
+  try {
+    const clientId = parseInt(req.params.id, 10);
+    const data = db.exportClientData(clientId);
+    if (!data) return res.status(404).json({ success: false, error: 'Client not found' });
+
+    db.logAudit({
+      user_id: req.user.sub,
+      client_id: clientId,
+      action: 'GDPR_DATA_EXPORTED',
+      entity_type: 'CLIENT',
+      entity_id: clientId,
+      ip_address: req.ip
+    });
+
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GDPR Right to Erasure
+app.delete('/api/clients/:id/erase', requireAuth, requireRole(ROLES.OWNER), (req, res) => {
+  try {
+    const clientId = parseInt(req.params.id, 10);
+    db.eraseClientData(clientId);
+    logger.warn({ clientId, erasedBy: req.user.sub }, '[GDPR] Client data permanently erased');
+    res.json({ success: true, message: `All data for client #${clientId} has been permanently erased in accordance with GDPR.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// CLIENT REVIEW GATES & SINGLE-USE MAGIC LINKS
+// ============================================================================
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -867,7 +1209,10 @@ app.post('/api/review/:id/reject', (req, res) => {
   }
 });
 
-// --- GOOGLE OAUTH ROUTES ---
+// ============================================================================
+// GOOGLE OAUTH ROUTES
+// ============================================================================
+
 app.get('/auth/youtube', (req, res) => {
   try {
     const clientId = req.query.clientId ? String(req.query.clientId) : '1';
@@ -885,7 +1230,7 @@ app.get('/auth/youtube', (req, res) => {
 
 app.get('/auth/youtube/callback', async (req, res) => {
   const code = req.query.code;
-  const stateParam = req.query.state; // contains clientId!
+  const stateParam = req.query.state;
   if (!code) {
     return res.status(400).send('Missing authorization code from Google.');
   }
@@ -908,14 +1253,46 @@ app.get('/auth/youtube/callback', async (req, res) => {
   }
 });
 
-// Start background scheduler & HTTP server
+// ============================================================================
+// DAEMON INITIALIZATION & GRACEFUL SHUTDOWN
+// ============================================================================
+
+// Run PostgreSQL migrations if configured in environment
+if (isPostgresConfigured()) {
+  runPostgresMigrations().catch((err) => {
+    logger.error({ err: err.message }, 'Failed to apply PostgreSQL migrations on boot');
+  });
+}
+
+// Start background queue scheduler daemon
 startScheduler(60000);
 
 const HOST = process.env.HOST || '127.0.0.1';
 
-app.listen(PORT, HOST, () => {
-  console.log(`=======================================================`);
-  console.log(`🚀 Social Media Auto-Poster Web App running at:`);
-  console.log(`👉 http://${HOST}:${PORT}`);
-  console.log(`=======================================================`);
+const server = app.listen(PORT, HOST, () => {
+  logger.info(`=======================================================`);
+  logger.info(`🚀 SocialPulse Studio Enterprise Engine v2.0 running at:`);
+  logger.info(`👉 http://${HOST}:${PORT}`);
+  logger.info(`=======================================================`);
 });
+
+// Graceful Shutdown Signal Handling
+async function handleShutdown(signal) {
+  logger.info({ signal }, 'Received termination signal, initiating graceful shutdown...');
+  await stopScheduler(5000);
+  server.close(() => {
+    logger.info('HTTP server closed. Exiting process.');
+    process.exit(0);
+  });
+
+  // Force exit after 10s if connections linger
+  setTimeout(() => {
+    logger.error('Graceful shutdown timed out after 10s. Forcing exit.');
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+module.exports = { app, server };

@@ -183,6 +183,24 @@ ENCRYPTION_SECRET=your_generated_64_char_hex_secret
 
 ---
 
+### Option D: Docker Compose Deployment (Enterprise PostgreSQL & Redis Stack)
+
+For horizontal scalability and cloud environments, deploy using the pre-configured `docker-compose.yml`:
+
+1. Ensure Docker & Docker Compose are installed.
+2. Configure `.env` with production secrets (`ENCRYPTION_SECRET`, `JWT_SECRET`).
+3. Launch the container stack:
+   ```bash
+   docker compose up -d
+   ```
+4. Verify container health:
+   ```bash
+   docker compose ps
+   curl http://localhost:3000/healthz
+   ```
+
+---
+
 ## 💾 Database Backups
 
 Because SocialPulse uses embedded SQLite, backing up your data is instantaneous:
