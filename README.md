@@ -2,7 +2,7 @@
 
 SocialPulse Studio is an enterprise-grade, self-hosted multi-channel social media publishing engine and visual editorial workbench built for marketing teams and agencies. Publish and schedule content across **YouTube (Videos & Shorts), X (Twitter), LinkedIn, Instagram, Threads, and Facebook** with complete data ownership.
 
-Built with an **architecture-first engineering philosophy**, SocialPulse Studio provides deterministic platform compilation, outbound link decoupling, media transcoding, granular Role-Based Access Control (RBAC), and dual persistence modes (embedded SQLite for local development or PostgreSQL with Row-Level Security for enterprise cloud clusters).
+Built with an **architecture-first engineering philosophy**, SocialPulse Studio provides deterministic platform compilation, outbound link decoupling, media transcoding, granular Role-Based Access Control (RBAC) with Anti-IDOR tenant isolation, and a high-performance native embedded SQLite Write-Ahead Logging (WAL) engine with optional PostgreSQL enterprise schema migrations.
 
 ---
 
@@ -26,9 +26,9 @@ Built with an **architecture-first engineering philosophy**, SocialPulse Studio 
    - **Dead-Letter Protection:** Automatically marks jobs as `failed` with diagnostic summaries after 5 attempts.
    - **Graceful Shutdown:** Handles `SIGTERM`/`SIGINT`, draining active worker leases before terminating.
 
-4. **Dual-Mode Persistence (SQLite & PostgreSQL):**
-   - **Local / Standalone Mode:** Embedded Node 24 `node:sqlite` running in WAL mode with 5-second busy timeouts and atomic worker lease locks. Zero external database required.
-   - **Enterprise Cloud Mode:** Production PostgreSQL 16 schema (`postgres-schema.sql`) with **Row-Level Security (RLS)**, connection pooling (`pg.Pool`), and foreign key cascades.
+4. **High-Performance Embedded Engine & Enterprise Migrations:**
+   - **Native Embedded Engine:** Embedded Node 24 `node:sqlite` running in WAL mode with 5-second busy timeouts and atomic worker lease locks. Zero external database or Redis required for standalone production.
+   - **Enterprise Schema:** Production PostgreSQL 16 schema (`postgres-schema.sql`) with Row-Level Security (RLS) definitions, connection pooling (`pg.Pool`), and foreign key cascades.
 
 5. **Compliance & Audit Logging:**
    - **Immutable Audit Trail:** Logs all critical actions (logins, post creation, edits, deletions) with actor IDs and IP addresses.
@@ -98,7 +98,7 @@ Open your browser at:
 
 ## 🐳 Docker Production Deployment
 
-Run the complete production stack (SocialPulse Studio + PostgreSQL 16 + Redis 7):
+Run the production stack (SocialPulse Studio with persistent volumes and optional PostgreSQL 16):
 
 ```bash
 docker compose up -d
@@ -170,6 +170,7 @@ npm test
 ```
 
 Verification coverage includes:
+
 1. AES-256-GCM Envelope Encryption (SPV2) with dynamic salt
 2. Single-use HMAC-SHA256 tokens and timing-safe validation
 3. Compiler anti-penalty outbound link decoupling and category resolution

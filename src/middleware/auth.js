@@ -77,6 +77,15 @@ function enforceTenantScope(req, res, next) {
 
   const userClientId = req.user.client_id;
 
+  // Check URL parameter if route is scoped by client (e.g. /api/clients/:id/...)
+  const routeClientId = req.params?.clientId || (req.path.includes('/clients/') ? req.params?.id : null);
+  if (routeClientId) {
+    const parsedId = parseInt(routeClientId, 10);
+    if (!isNaN(parsedId) && parsedId !== userClientId) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to requested client workspace is denied' });
+    }
+  }
+
   // Check query parameter
   if (req.query.clientId && parseInt(req.query.clientId, 10) !== userClientId) {
     return res.status(403).json({ success: false, error: 'Forbidden: Access to requested client workspace is denied' });

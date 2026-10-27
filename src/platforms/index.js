@@ -171,6 +171,26 @@ async function postInstagramFirstComment(mediaId, commentText, clientId = null) 
   return { success: true, commentId: data.id };
 }
 
+async function resolvePlatformMediaUrl(mediaPath) {
+  if (!mediaPath || !fs.existsSync(mediaPath)) return null;
+
+  if (isCloudStorageConfigured()) {
+    try {
+      const uploadRes = await uploadLocalFileToCloud(mediaPath);
+      return uploadRes.publicUrl;
+    } catch (s3Err) {
+      console.error('[Platform Media] Cloud upload failed:', s3Err.message);
+    }
+  }
+
+  const baseUrl = process.env.BASE_URL;
+  if (baseUrl && !baseUrl.includes('localhost') && !baseUrl.includes('127.0.0.1')) {
+    return `${baseUrl.replace(/\/$/, '')}/uploads/${path.basename(mediaPath)}`;
+  }
+
+  return null;
+}
+
 async function publishThreads(post) {
   const clientTokens = getClientPlatformTokens(post.client_id, 'threads');
   const token = clientTokens?.accessToken || process.env.THREADS_ACCESS_TOKEN;
@@ -183,13 +203,94 @@ async function publishThreads(post) {
     };
   }
 
+  const text = (post.threads_post || post.master_text || '').trim();
+  const mediaPath = post.media_overrides?.threads?.path || post.media_path;
+
   try {
+    const containerPayload = {
+      text,
+      access_token: token
+    };
+
+    if (post.threads_quote_post_id) {
+      containerPayload.quote_post_id = post.threads_quote_post_id;
+    }
+
+    if (mediaPath && fs.existsSync(mediaPath)) {
+      const ext = path.extname(mediaPath).toLowerCase();
+      const isVideo = ['.mp4', '.mov', '.m4v'].includes(ext);
+      const publicMediaUrl = await resolvePlatformMediaUrl(mediaPath);
+
+      if (!publicMediaUrl) {
+        return {
+          platform: 'threads',
+          success: false,
+          error: 'Threads media publishing requires a public HTTPS media URL. Please configure cloud storage (R2/S3) or BASE_URL.'
+        };
+      }
+
+      containerPayload.media_type = isVideo ? 'VIDEO' : 'IMAGE';
+      if (isVideo) {
+        containerPayload.video_url = publicMediaUrl;
+      } else {
+        containerPayload.image_url = publicMediaUrl;
+      }
+    } else {
+      containerPayload.media_type = 'TEXT';
+    }
+
+    // Step 1: Create Container
+    const containerRes = await fetch('https://graph.threads.net/v1.0/me/threads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(containerPayload)
+    });
+
+    const containerData = await containerRes.json();
+    if (!containerRes.ok) {
+      return { platform: 'threads', success: false, error: containerData.error?.message || `HTTP ${containerRes.status}` };
+    }
+
+    const creationId = containerData.id;
+
+    // Step 2: Poll status if video
+    if (containerPayload.media_type === 'VIDEO') {
+      let status = 'IN_PROGRESS';
+      let attempts = 0;
+      while (status !== 'FINISHED' && attempts < 30) {
+        await new Promise((r) => setTimeout(r, 4000));
+        attempts++;
+        const statusRes = await fetch(`https://graph.threads.net/v1.0/${creationId}?fields=status,error_message&access_token=${token}`);
+        const statusData = await statusRes.json();
+        status = statusData.status;
+        if (status === 'ERROR') {
+          return { platform: 'threads', success: false, error: statusData.error_message || 'Threads video transcoding failed on Meta servers' };
+        }
+      }
+    }
+
+    // Step 3: Publish container
+    const publishRes = await fetch('https://graph.threads.net/v1.0/me/threads_publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        creation_id: creationId,
+        access_token: token
+      })
+    });
+
+    const pubData = await publishRes.json();
+    if (!publishRes.ok) {
+      return { platform: 'threads', success: false, error: pubData.error?.message || 'Threads publish failed' };
+    }
+
+    const postId = pubData.id;
     return {
       platform: 'threads',
       success: true,
-      text: post.threads_post,
-      quote_post_id: post.threads_quote_post_id || null,
-      note: 'Validated with relational quoting.'
+      postId,
+      url: `https://www.threads.net/post/${postId}`,
+      text
     };
   } catch (err) {
     return {
@@ -246,12 +347,63 @@ async function publishFacebook(post) {
     };
   }
 
+  const message = (post.facebook_post || post.master_text || '').trim();
+  const mediaPath = post.media_overrides?.facebook?.path || post.media_path;
+
   try {
+    if (mediaPath && fs.existsSync(mediaPath)) {
+      const ext = path.extname(mediaPath).toLowerCase();
+      const isVideo = ['.mp4', '.mov', '.m4v'].includes(ext);
+      const endpoint = isVideo
+        ? `https://graph.facebook.com/v20.0/${encodeURIComponent(pageId)}/videos`
+        : `https://graph.facebook.com/v20.0/${encodeURIComponent(pageId)}/photos`;
+
+      const formData = new FormData();
+      formData.append('access_token', token);
+      formData.append(isVideo ? 'description' : 'caption', message);
+      const fileBytes = fs.readFileSync(mediaPath);
+      formData.append('source', new Blob([fileBytes], { type: isVideo ? 'video/mp4' : 'image/jpeg' }));
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { platform: 'facebook', success: false, error: data.error?.message || `HTTP ${res.status}` };
+      }
+
+      const postId = data.id || data.post_id;
+      return {
+        platform: 'facebook',
+        success: true,
+        postId,
+        url: `https://www.facebook.com/${postId}`
+      };
+    }
+
+    // Pure Text Post
+    const res = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(pageId)}/feed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        access_token: token
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      return { platform: 'facebook', success: false, error: data.error?.message || `HTTP ${res.status}` };
+    }
+
+    const postId = data.id || data.post_id;
     return {
       platform: 'facebook',
       success: true,
-      post: post.facebook_post,
-      note: 'Simulated dispatch with client credentials.'
+      postId,
+      url: `https://www.facebook.com/${postId}`
     };
   } catch (err) {
     return {
@@ -260,6 +412,25 @@ async function publishFacebook(post) {
       error: err.message
     };
   }
+}
+
+async function postFacebookFirstComment(postId, commentText, clientId = null) {
+  const clientTokens = getClientPlatformTokens(clientId, 'facebook');
+  const token = clientTokens?.accessToken || process.env.META_ACCESS_TOKEN;
+  if (!token) throw new Error('Facebook token missing for first comment.');
+
+  const res = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(postId)}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: commentText.trim(),
+      access_token: token
+    })
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+  return { success: true, commentId: data.id };
 }
 
 /**
@@ -344,6 +515,9 @@ async function dispatchPost(post) {
         } else if (key.includes('threads') && results.threads?.postId) {
           const fc = await postThreadsFirstReply(results.threads.postId, post.first_comment, post.client_id);
           results.first_comments.threads = fc;
+        } else if (key.includes('facebook') && results.facebook?.postId) {
+          const fc = await postFacebookFirstComment(results.facebook.postId, post.first_comment, post.client_id);
+          results.first_comments.facebook = fc;
         }
       } catch (fcErr) {
         results.first_comments[key] = { success: false, error: fcErr.message };
@@ -446,6 +620,8 @@ async function replyToEngagementTask(task, replyText, clientId = null) {
     dispatchResult = await postLinkedInFirstComment(task.parent_post_id, replyText, targetClient);
   } else if (task.platform === 'INSTAGRAM') {
     dispatchResult = await postInstagramFirstComment(task.external_comment_id, replyText, targetClient);
+  } else if (task.platform === 'FACEBOOK') {
+    dispatchResult = await postFacebookFirstComment(task.external_comment_id || task.parent_post_id, replyText, targetClient);
   } else {
     throw new Error(`Direct reply not supported for platform: ${task.platform}`);
   }
@@ -474,5 +650,6 @@ module.exports = {
   publishThreads,
   postThreadsFirstReply,
   publishFacebook,
+  postFacebookFirstComment,
   getClientPlatformTokens
 };

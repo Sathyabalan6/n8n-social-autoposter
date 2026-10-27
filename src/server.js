@@ -33,8 +33,8 @@ const { circuitBreaker } = require('./queue/circuit-breaker');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Setup uploads folder inside public
-const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
+// Setup dedicated uploads folder outside public web root
+const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -131,15 +131,18 @@ function safeGetUrlOrigin(urlStr) {
 
 // Security Middleware: Prevent DNS rebinding and cross-site request attacks
 app.use((req, res, next) => {
-  const host = req.headers.host || '';
+  const host = (req.headers.host || '').toLowerCase();
+  const hostname = host.split(':')[0];
   const origin = req.headers.origin;
 
   // Allow localhost / 127.0.0.1 or configured BASE_URL host
-  const isLocalHost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
   const configuredHost = safeGetUrlHost(process.env.BASE_URL);
 
-  if (!isLocalHost && configuredHost && host !== configuredHost) {
-    return res.status(403).json({ success: false, error: 'Forbidden: Invalid Host Header' });
+  if (!isLocalHost) {
+    if (!configuredHost || (host !== configuredHost && hostname !== configuredHost.split(':')[0])) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Invalid Host Header' });
+    }
   }
 
   if (origin) {
@@ -160,6 +163,20 @@ app.use((req, res, next) => {
 
 // Global Token Authentication Middleware
 app.use(authenticate);
+
+// Dedicated route for uploaded media with traversal protection
+app.get('/uploads/:filename', (req, res) => {
+  const safeFilename = path.basename(req.params.filename);
+  const filePath = path.join(uploadDir, safeFilename);
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  const legacyPath = path.join(__dirname, '..', 'public', 'uploads', safeFilename);
+  if (fs.existsSync(legacyPath)) {
+    return res.sendFile(legacyPath);
+  }
+  res.status(404).send('File not found');
+});
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -329,21 +346,25 @@ app.get('/api/users', requireAuth, requireRole(ROLES.OWNER, ROLES.ADMIN), (req, 
 // AGENCY CLIENTS & ACCOUNTS ROUTES
 // ============================================================================
 
-app.get('/api/clients', (_req, res) => {
+app.get('/api/clients', requireAuth, (req, res) => {
   try {
-    const clients = db.getClients();
+    const allClients = db.getClients();
+    // Non-owners can only see their assigned client workspace
+    const clients = req.user.role === ROLES.OWNER
+      ? allClients
+      : allClients.filter((c) => c.id === req.user.client_id);
     res.json({ success: true, clients });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/clients', validateBody(createClientSchema), (req, res) => {
+app.post('/api/clients', requireAuth, requireRole(ROLES.OWNER, ROLES.ADMIN), validateBody(createClientSchema), (req, res) => {
   try {
     const { name, color_code } = req.body;
     const client = db.createClient(name.trim(), color_code);
     db.logAudit({
-      user_id: req.user?.sub || null,
+      user_id: req.user.sub,
       client_id: client.id,
       action: 'CLIENT_CREATED',
       entity_type: 'CLIENT',
@@ -357,12 +378,12 @@ app.post('/api/clients', validateBody(createClientSchema), (req, res) => {
   }
 });
 
-app.delete('/api/clients/:id', (req, res) => {
+app.delete('/api/clients/:id', requireAuth, requireRole(ROLES.OWNER), (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     db.deleteClient(clientId);
     db.logAudit({
-      user_id: req.user?.sub || null,
+      user_id: req.user.sub,
       client_id: clientId,
       action: 'CLIENT_DELETED',
       entity_type: 'CLIENT',
@@ -375,7 +396,7 @@ app.delete('/api/clients/:id', (req, res) => {
   }
 });
 
-app.get('/api/clients/:id/accounts', enforceTenantScope, (req, res) => {
+app.get('/api/clients/:id/accounts', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const accounts = db.getAccountsByClient(req.params.id);
     res.json({ success: true, accounts });
@@ -384,7 +405,7 @@ app.get('/api/clients/:id/accounts', enforceTenantScope, (req, res) => {
   }
 });
 
-app.get('/api/accounts', (_req, res) => {
+app.get('/api/accounts', requireAuth, requireRole(ROLES.OWNER, ROLES.ADMIN), (_req, res) => {
   try {
     const accounts = db.getAllAccounts();
     res.json({ success: true, accounts });
@@ -393,13 +414,13 @@ app.get('/api/accounts', (_req, res) => {
   }
 });
 
-app.post('/api/clients/:id/accounts', enforceTenantScope, validateBody(createAccountSchema), (req, res) => {
+app.post('/api/clients/:id/accounts', requireAuth, enforceTenantScope, validateBody(createAccountSchema), (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     const { platform, account_name, account_handle, tokens } = req.body;
     const id = db.saveAccountTokens(clientId, platform.toLowerCase(), account_name.trim(), account_handle || '', '', tokens || {});
     db.logAudit({
-      user_id: req.user?.sub || null,
+      user_id: req.user.sub,
       client_id: clientId,
       action: 'ACCOUNT_CONNECTED',
       entity_type: 'SOCIAL_ACCOUNT',
@@ -413,13 +434,23 @@ app.post('/api/clients/:id/accounts', enforceTenantScope, validateBody(createAcc
   }
 });
 
-app.delete('/api/accounts/:id', (req, res) => {
+app.delete('/api/accounts/:id', requireAuth, (req, res) => {
   try {
     const accountId = parseInt(req.params.id, 10);
+    const accounts = db.getAllAccounts();
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) {
+      return res.status(404).json({ success: false, error: 'Account not found' });
+    }
+
+    if (req.user.role !== ROLES.OWNER && account.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this account is denied' });
+    }
+
     db.deleteAccount(accountId);
     db.logAudit({
-      user_id: req.user?.sub || null,
-      client_id: req.user?.client_id || 1,
+      user_id: req.user.sub,
+      client_id: account.client_id,
       action: 'ACCOUNT_DELETED',
       entity_type: 'SOCIAL_ACCOUNT',
       entity_id: accountId,
@@ -437,7 +468,7 @@ app.get('/api/youtube/categories', (_req, res) => {
 });
 
 // Live Validation & Preview compiler
-app.post('/api/compile', (req, res) => {
+app.post('/api/compile', requireAuth, (req, res) => {
   try {
     const compiled = compilePost(req.body);
     res.json({ success: true, compiled });
@@ -450,25 +481,26 @@ app.post('/api/compile', (req, res) => {
 // MEDIA ENGINE & TRANSCODING ROUTES
 // ============================================================================
 
-app.get('/api/media/storage-status', (_req, res) => {
+app.get('/api/media/storage-status', requireAuth, (_req, res) => {
   res.json({ success: true, configured: isCloudStorageConfigured() });
 });
 
-app.post('/api/media/presign-upload', async (req, res) => {
+app.post('/api/media/presign-upload', requireAuth, enforceTenantScope, async (req, res) => {
   try {
     if (!isCloudStorageConfigured()) {
       return res.status(400).json({ success: false, error: 'Cloud storage is not configured in .env' });
     }
     const { filename, mimetype, tenantId } = req.body;
     if (!filename) return res.status(400).json({ success: false, error: 'filename is required' });
-    const { uploadUrl, objectKey } = await generatePresignedUploadUrl(filename, mimetype, tenantId || 'default');
+    const targetTenant = req.user.role === ROLES.OWNER ? (tenantId || String(req.user.client_id)) : String(req.user.client_id);
+    const { uploadUrl, objectKey } = await generatePresignedUploadUrl(filename, mimetype, targetTenant);
     res.json({ success: true, uploadUrl, objectKey });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/media/inspect', upload.single('media'), async (req, res) => {
+app.post('/api/media/inspect', requireAuth, upload.single('media'), async (req, res) => {
   try {
     let filePath = req.file?.path;
     if (!filePath && req.body.filename) {
@@ -485,7 +517,7 @@ app.post('/api/media/inspect', upload.single('media'), async (req, res) => {
   }
 });
 
-app.post('/api/media/transcode/vertical', upload.single('media'), async (req, res) => {
+app.post('/api/media/transcode/vertical', requireAuth, upload.single('media'), async (req, res) => {
   try {
     let inputPath = req.file?.path;
     let originalName = req.file?.originalname || req.body.filename || 'video.mp4';
@@ -518,7 +550,7 @@ app.post('/api/media/transcode/vertical', upload.single('media'), async (req, re
   }
 });
 
-app.post('/api/media/thumbnail', async (req, res) => {
+app.post('/api/media/thumbnail', requireAuth, async (req, res) => {
   try {
     const { filename, timestamp } = req.body;
     if (!filename) {
@@ -550,7 +582,7 @@ app.post('/api/media/thumbnail', async (req, res) => {
 // POSTS CRUD WITH IDEMPOTENCY & AUDIT LOGGING
 // ============================================================================
 
-app.post('/api/posts', uploadFields, async (req, res) => {
+app.post('/api/posts', requireAuth, enforceTenantScope, uploadFields, async (req, res) => {
   try {
     // 1. Idempotency Key Guard: Protect against duplicate submissions
     const idempotencyKey = req.headers['idempotency-key'];
@@ -614,8 +646,10 @@ app.post('/api/posts', uploadFields, async (req, res) => {
       }
     }
 
-    // Anti-IDOR Client ID resolution
-    const clientId = req.user?.client_id || (body.client_id ? parseInt(body.client_id, 10) : 1);
+    // Anti-IDOR Client ID resolution: only OWNER can post on behalf of other clients
+    const clientId = req.user.role === ROLES.OWNER && body.client_id
+      ? parseInt(body.client_id, 10)
+      : req.user.client_id;
 
     const postRecord = {
       ...compiled,
@@ -676,11 +710,12 @@ app.post('/api/posts', uploadFields, async (req, res) => {
 });
 
 // List posts (Scaped by Client ID)
-app.get('/api/posts', (req, res) => {
+app.get('/api/posts', requireAuth, (req, res) => {
   try {
-    const clientId = req.user?.role !== ROLES.OWNER && req.user?.client_id
-      ? req.user.client_id
-      : (req.query.clientId ? parseInt(req.query.clientId, 10) : null);
+    let clientId = req.user.client_id;
+    if (req.user.role === ROLES.OWNER) {
+      clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
+    }
     const posts = db.getAllPosts(clientId);
     res.json({ success: true, posts });
   } catch (err) {
@@ -689,7 +724,7 @@ app.get('/api/posts', (req, res) => {
 });
 
 // Update / Edit post
-app.put('/api/posts/:id', uploadFields, async (req, res) => {
+app.put('/api/posts/:id', requireAuth, enforceTenantScope, uploadFields, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const existing = db.getPostById(id);
@@ -697,7 +732,7 @@ app.put('/api/posts/:id', uploadFields, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Post not found' });
     }
 
-    if (req.user && req.user.role !== ROLES.OWNER && existing.client_id !== req.user.client_id) {
+    if (req.user.role !== ROLES.OWNER && existing.client_id !== req.user.client_id) {
       return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
     }
 
@@ -787,7 +822,7 @@ app.put('/api/posts/:id', uploadFields, async (req, res) => {
 });
 
 // Atomic Drag-and-Drop Reschedule
-app.patch('/api/posts/:id/schedule', validateBody(reschedulePostSchema), (req, res) => {
+app.patch('/api/posts/:id/schedule', requireAuth, enforceTenantScope, validateBody(reschedulePostSchema), (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { scheduled_at } = req.body;
@@ -795,6 +830,10 @@ app.patch('/api/posts/:id/schedule', validateBody(reschedulePostSchema), (req, r
     const existing = db.getPostById(id);
     if (!existing) {
       return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    if (req.user.role !== ROLES.OWNER && existing.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
     }
 
     if (existing.status === 'completed') {
@@ -824,21 +863,27 @@ app.patch('/api/posts/:id/schedule', validateBody(reschedulePostSchema), (req, r
 });
 
 // Delete Post
-app.delete('/api/posts/:id', (req, res) => {
+app.delete('/api/posts/:id', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const post = db.getPostById(id);
-    if (post) {
-      db.deletePost(id);
-      db.logAudit({
-        user_id: req.user?.sub || null,
-        client_id: post.client_id,
-        action: 'POST_DELETED',
-        entity_type: 'POST',
-        entity_id: id,
-        ip_address: req.ip
-      });
+    if (!post) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
     }
+
+    if (req.user.role !== ROLES.OWNER && post.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
+
+    db.deletePost(id);
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: post.client_id,
+      action: 'POST_DELETED',
+      entity_type: 'POST',
+      entity_id: id,
+      ip_address: req.ip
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -849,11 +894,15 @@ app.delete('/api/posts/:id', (req, res) => {
 // PERFORMANCE METRICS & ENGAGEMENT INBOX
 // ============================================================================
 
-app.get('/api/posts/:id/metrics', (req, res) => {
+app.get('/api/posts/:id/metrics', requireAuth, (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const post = db.getPostById(id);
     if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    if (req.user.role !== ROLES.OWNER && post.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
 
     const snapshots = db.getMetricsForPost(id);
     const latest = db.getLatestPostMetrics(id);
@@ -863,11 +912,15 @@ app.get('/api/posts/:id/metrics', (req, res) => {
   }
 });
 
-app.post('/api/posts/:id/sync-metrics', async (req, res) => {
+app.post('/api/posts/:id/sync-metrics', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const post = db.getPostById(id);
     if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    if (req.user.role !== ROLES.OWNER && post.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
 
     const result = await syncPostMetrics(post, 'MANUAL');
     const latest = db.getLatestPostMetrics(id);
@@ -877,7 +930,7 @@ app.post('/api/posts/:id/sync-metrics', async (req, res) => {
   }
 });
 
-app.get('/api/clients/:id/inbox', (req, res) => {
+app.get('/api/clients/:id/inbox', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     const isRepliedParam = req.query.is_replied;
@@ -889,7 +942,7 @@ app.get('/api/clients/:id/inbox', (req, res) => {
   }
 });
 
-app.post('/api/inbox/:id/reply', validateBody(replyInboxSchema), async (req, res) => {
+app.post('/api/inbox/:id/reply', requireAuth, validateBody(replyInboxSchema), async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
     const { reply_text, client_id } = req.body;
@@ -897,9 +950,14 @@ app.post('/api/inbox/:id/reply', validateBody(replyInboxSchema), async (req, res
     const task = db.getEngagementTaskById(taskId);
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' });
 
-    const result = await replyToEngagementTask(task, reply_text.trim(), client_id);
+    if (req.user.role !== ROLES.OWNER && task.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this task is denied' });
+    }
+
+    const targetClientId = req.user.role === ROLES.OWNER && client_id ? client_id : task.client_id;
+    const result = await replyToEngagementTask(task, reply_text.trim(), targetClientId);
     db.logAudit({
-      user_id: req.user?.sub || null,
+      user_id: req.user.sub,
       client_id: task.client_id,
       action: 'INBOX_REPLY_SENT',
       entity_type: 'ENGAGEMENT_TASK',
@@ -912,9 +970,11 @@ app.post('/api/inbox/:id/reply', validateBody(replyInboxSchema), async (req, res
   }
 });
 
-app.post('/api/inbox/sync', async (req, res) => {
+app.post('/api/inbox/sync', requireAuth, enforceTenantScope, async (req, res) => {
   try {
-    const clientId = req.body.client_id ? parseInt(req.body.client_id, 10) : 1;
+    const clientId = req.user.role === ROLES.OWNER && req.body.client_id
+      ? parseInt(req.body.client_id, 10)
+      : req.user.client_id;
     const syncRes = await syncInboundComments(clientId);
     res.json({ success: true, syncRes });
   } catch (err) {
@@ -922,9 +982,16 @@ app.post('/api/inbox/sync', async (req, res) => {
   }
 });
 
-app.delete('/api/inbox/:id', (req, res) => {
+app.delete('/api/inbox/:id', requireAuth, (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
+    const task = db.getEngagementTaskById(taskId);
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' });
+
+    if (req.user.role !== ROLES.OWNER && task.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this task is denied' });
+    }
+
     db.deleteEngagementTask(taskId);
     res.json({ success: true });
   } catch (err) {
@@ -936,7 +1003,7 @@ app.delete('/api/inbox/:id', (req, res) => {
 // QUEUE RULES & SMART BUFFER-STYLE SLOTS
 // ============================================================================
 
-app.get('/api/clients/:id/queue-rules', (req, res) => {
+app.get('/api/clients/:id/queue-rules', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const rules = db.getQueueRules(req.params.id);
     res.json({ success: true, rules });
@@ -945,7 +1012,7 @@ app.get('/api/clients/:id/queue-rules', (req, res) => {
   }
 });
 
-app.post('/api/clients/:id/queue-rules', validateBody(queueRuleSchema), (req, res) => {
+app.post('/api/clients/:id/queue-rules', requireAuth, enforceTenantScope, validateBody(queueRuleSchema), (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     const { timezone, iso_weekday, local_time } = req.body;
@@ -956,7 +1023,7 @@ app.post('/api/clients/:id/queue-rules', validateBody(queueRuleSchema), (req, re
   }
 });
 
-app.delete('/api/queue-rules/:id', (req, res) => {
+app.delete('/api/queue-rules/:id', requireAuth, (req, res) => {
   try {
     db.deleteQueueRule(req.params.id);
     res.json({ success: true });
@@ -965,7 +1032,7 @@ app.delete('/api/queue-rules/:id', (req, res) => {
   }
 });
 
-app.get('/api/clients/:id/next-slot', (req, res) => {
+app.get('/api/clients/:id/next-slot', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     const rules = db.getQueueRules(clientId);
@@ -1042,11 +1109,15 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-app.post('/api/posts/:id/request-approval', (req, res) => {
+app.post('/api/posts/:id/request-approval', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const postId = parseInt(req.params.id, 10);
     const post = db.getPostById(postId);
     if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    if (req.user.role !== ROLES.OWNER && post.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
 
     const { rawToken, tokenHash, expiresAt } = generateApprovalToken();
     db.setApprovalToken(postId, tokenHash, expiresAt);
@@ -1264,17 +1335,20 @@ if (isPostgresConfigured()) {
   });
 }
 
-// Start background queue scheduler daemon
-startScheduler(60000);
+let server = null;
 
-const HOST = process.env.HOST || '127.0.0.1';
+// Only bind listener and start scheduler daemon when executed directly
+if (require.main === module) {
+  startScheduler(60000);
 
-const server = app.listen(PORT, HOST, () => {
-  logger.info(`=======================================================`);
-  logger.info(`🚀 SocialPulse Studio Enterprise Engine v2.0 running at:`);
-  logger.info(`👉 http://${HOST}:${PORT}`);
-  logger.info(`=======================================================`);
-});
+  const HOST = process.env.HOST || '127.0.0.1';
+  server = app.listen(PORT, HOST, () => {
+    logger.info(`=======================================================`);
+    logger.info(`🚀 SocialPulse Studio Enterprise Engine v2.0 running at:`);
+    logger.info(`👉 http://${HOST}:${PORT}`);
+    logger.info(`=======================================================`);
+  });
+}
 
 // Graceful Shutdown Signal Handling
 async function handleShutdown(signal) {

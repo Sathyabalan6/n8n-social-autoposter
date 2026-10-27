@@ -6,7 +6,15 @@ window.fetch = async function (resource, init = {}) {
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  return originalFetch(resource, { ...init, headers });
+  const response = await originalFetch(resource, { ...init, headers });
+  if (response.status === 401 && typeof resource === 'string' && !resource.includes('/api/auth/login')) {
+    localStorage.removeItem('socialpulse_token');
+    localStorage.removeItem('socialpulse_user');
+    if (typeof updateAuthUI === 'function') updateAuthUI();
+    const authModal = document.getElementById('auth-modal');
+    if (authModal) authModal.style.display = 'flex';
+  }
+  return response;
 };
 
 // --- STATE MANAGEMENT ---
@@ -2532,6 +2540,9 @@ if (authForm) {
         updateAuthUI();
         if (authModal) authModal.style.display = 'none';
         showToast(`Welcome back, ${data.user.name}!`, 'success');
+        await fetchClients();
+        fetchQueue();
+        fetchQueueRules(state.activeClientId);
       } else {
         showToast(data.error || 'Authentication failed', 'error');
       }

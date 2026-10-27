@@ -3,7 +3,7 @@ const path = require('node:path');
 const { encrypt, decrypt } = require('./crypto');
 const logger = require('./logger');
 
-const dbPath = path.join(__dirname, '..', 'posts.sqlite');
+const dbPath = process.env.SQLITE_PATH || path.join(__dirname, '..', 'posts.sqlite');
 const db = new DatabaseSync(dbPath);
 
 // Enterprise SQLite High-Concurrency Configuration

@@ -29,7 +29,7 @@ async function checkAndProcessDuePosts() {
       const platforms = Array.isArray(job.platforms) ? job.platforms : [];
 
       // Check Circuit Breakers: if all platforms are currently open, postpone job
-      const allCircuitsOpen = platforms.length > 0 && platforms.every((p) => circuitBreaker.isOpen(p));
+      const allCircuitsOpen = platforms.length > 0 && platforms.every((p) => circuitBreaker.isOpen(String(p).toLowerCase()));
       if (allCircuitsOpen) {
         logger.warn(
           { jobId: job.id, platforms },
@@ -51,13 +51,14 @@ async function checkAndProcessDuePosts() {
       try {
         const { results, finalStatus, errorSummary } = await dispatchPost(job);
 
-        // Record Circuit Breaker telemetry
+        // Record Circuit Breaker telemetry (normalized lowercase keys)
         for (const p of platforms) {
-          const res = results[p];
+          const key = String(p).toLowerCase();
+          const res = results[key] || results[p];
           if (res && res.success) {
-            circuitBreaker.recordSuccess(p);
+            circuitBreaker.recordSuccess(key);
           } else if (res && !res.success) {
-            circuitBreaker.recordFailure(p, new Error(res.error || 'Dispatch failed'));
+            circuitBreaker.recordFailure(key, new Error(res.error || 'Dispatch failed'));
           }
         }
 

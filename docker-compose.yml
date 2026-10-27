@@ -15,22 +15,21 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - BASE_URL=http://localhost:3000
+      - SQLITE_PATH=/app/data/posts.sqlite
       - ENCRYPTION_SECRET=production_vault_secret_min_32_characters_long_12345
       - JWT_SECRET=jwt_super_secret_signing_key_for_tokens_2026
       - DATABASE_URL=postgresql://socialpulse:pulse_secret_pass@postgres:5432/socialpulse_db
-      - REDIS_URL=redis://redis:6379
       - ADMIN_EMAIL=admin@socialpulse.local
       - ADMIN_PASSWORD=SocialPulseAdmin2026!
       - LOG_LEVEL=info
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     security_opt:
       - no-new-privileges:true
     volumes:
-      - app-uploads:/app/public/uploads
+      - app-uploads:/app/uploads
+      - app-data:/app/data
 
   postgres:
     image: postgres:16-alpine
@@ -53,23 +52,7 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: socialpulse-redis
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
   pg-data:
-  redis-data:
+  app-data:
   app-uploads:
