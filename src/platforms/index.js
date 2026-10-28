@@ -12,6 +12,8 @@ const db = require('../db');
 const { publishYouTube, postYouTubeFirstComment, fetchYouTubeMetrics, fetchRecentYouTubeComments, replyToYouTubeComment } = require('./youtube');
 const { publishX, postXFirstReply, fetchXMetrics } = require('./x');
 const { publishLinkedIn, postLinkedInFirstComment } = require('./linkedin');
+const { publishThreads, postThreadsFirstReply, fetchThreadsMetrics } = require('./threads');
+const { publishFacebook, postFacebookFirstComment, fetchFacebookMetrics } = require('./facebook');
 const { isCloudStorageConfigured, uploadLocalFileToCloud } = require('../media/storage');
 
 function getClientPlatformTokens(clientId, platform) {
@@ -171,96 +173,7 @@ async function postInstagramFirstComment(mediaId, commentText, clientId = null) 
   return { success: true, commentId: data.id };
 }
 
-async function publishThreads(post) {
-  const clientTokens = getClientPlatformTokens(post.client_id, 'threads');
-  const token = clientTokens?.accessToken || process.env.THREADS_ACCESS_TOKEN;
 
-  if (!token) {
-    return {
-      platform: 'threads',
-      success: false,
-      error: 'Threads is not connected for this client. Please add Threads Token under Workspaces & APIs.'
-    };
-  }
-
-  try {
-    return {
-      platform: 'threads',
-      success: true,
-      text: post.threads_post,
-      quote_post_id: post.threads_quote_post_id || null,
-      note: 'Validated with relational quoting.'
-    };
-  } catch (err) {
-    return {
-      platform: 'threads',
-      success: false,
-      error: err.message
-    };
-  }
-}
-
-async function postThreadsFirstReply(replyToId, replyText, clientId = null) {
-  const clientTokens = getClientPlatformTokens(clientId, 'threads');
-  const token = clientTokens?.accessToken || process.env.THREADS_ACCESS_TOKEN;
-  if (!token) throw new Error('Threads token missing for first reply.');
-
-  const containerRes = await fetch('https://graph.threads.net/v1.0/me/threads', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      media_type: 'TEXT',
-      text: replyText.trim(),
-      reply_to_id: replyToId,
-      access_token: token
-    })
-  });
-
-  const containerData = await containerRes.json();
-  if (!containerRes.ok) throw new Error(containerData.error?.message || 'Threads reply container failed');
-
-  const publishRes = await fetch('https://graph.threads.net/v1.0/me/threads_publish', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      creation_id: containerData.id,
-      access_token: token
-    })
-  });
-
-  const pubData = await publishRes.json();
-  if (!publishRes.ok) throw new Error(pubData.error?.message || 'Threads reply publish failed');
-  return { success: true, id: pubData.id };
-}
-
-async function publishFacebook(post) {
-  const clientTokens = getClientPlatformTokens(post.client_id, 'facebook');
-  const token = clientTokens?.accessToken || process.env.META_ACCESS_TOKEN;
-  const pageId = clientTokens?.pageId || process.env.META_PAGE_ID;
-
-  if (!token || !pageId) {
-    return {
-      platform: 'facebook',
-      success: false,
-      error: 'Facebook is not connected for this client. Please add Page Access Token under Workspaces & APIs.'
-    };
-  }
-
-  try {
-    return {
-      platform: 'facebook',
-      success: true,
-      post: post.facebook_post,
-      note: 'Simulated dispatch with client credentials.'
-    };
-  } catch (err) {
-    return {
-      platform: 'facebook',
-      success: false,
-      error: err.message
-    };
-  }
-}
 
 /**
  * Two-Stage Unified Dispatch Engine
@@ -344,6 +257,9 @@ async function dispatchPost(post) {
         } else if (key.includes('threads') && results.threads?.postId) {
           const fc = await postThreadsFirstReply(results.threads.postId, post.first_comment, post.client_id);
           results.first_comments.threads = fc;
+        } else if (key.includes('facebook') && results.facebook?.postId) {
+          const fc = await postFacebookFirstComment(results.facebook.postId, post.first_comment, post.client_id);
+          results.first_comments.facebook = fc;
         }
       } catch (fcErr) {
         results.first_comments[key] = { success: false, error: fcErr.message };
@@ -390,6 +306,26 @@ async function syncPostMetrics(post, snapshotType = 'MANUAL') {
       metricsResults.x = xMetrics;
     } catch (err) {
       metricsResults.x = { error: err.message };
+    }
+  }
+
+  if (results.threads?.postId) {
+    try {
+      const threadsMetrics = await fetchThreadsMetrics(results.threads.postId, post.client_id);
+      db.saveMetricsSnapshot(post.id, 'THREADS', snapshotType, threadsMetrics);
+      metricsResults.threads = threadsMetrics;
+    } catch (err) {
+      metricsResults.threads = { error: err.message };
+    }
+  }
+
+  if (results.facebook?.postId) {
+    try {
+      const fbMetrics = await fetchFacebookMetrics(results.facebook.postId, post.client_id);
+      db.saveMetricsSnapshot(post.id, 'FACEBOOK', snapshotType, fbMetrics);
+      metricsResults.facebook = fbMetrics;
+    } catch (err) {
+      metricsResults.facebook = { error: err.message };
     }
   }
 
@@ -446,6 +382,10 @@ async function replyToEngagementTask(task, replyText, clientId = null) {
     dispatchResult = await postLinkedInFirstComment(task.parent_post_id, replyText, targetClient);
   } else if (task.platform === 'INSTAGRAM') {
     dispatchResult = await postInstagramFirstComment(task.external_comment_id, replyText, targetClient);
+  } else if (task.platform === 'THREADS') {
+    dispatchResult = await postThreadsFirstReply(task.external_comment_id, replyText, targetClient);
+  } else if (task.platform === 'FACEBOOK') {
+    dispatchResult = await postFacebookFirstComment(task.parent_post_id, replyText, targetClient);
   } else {
     throw new Error(`Direct reply not supported for platform: ${task.platform}`);
   }
@@ -473,6 +413,9 @@ module.exports = {
   postInstagramFirstComment,
   publishThreads,
   postThreadsFirstReply,
+  fetchThreadsMetrics,
   publishFacebook,
+  postFacebookFirstComment,
+  fetchFacebookMetrics,
   getClientPlatformTokens
 };

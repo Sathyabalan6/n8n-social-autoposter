@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node test/verify.js"
+    "test": "node test/verify.js && node --test test/adapters.test.js"
   },
   "repository": {
     "type": "git",
