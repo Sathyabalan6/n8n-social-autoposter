@@ -1,10 +1,13 @@
 const express = require('express');
 const db = require('../db');
 const { calculateNextAvailableSlot } = require('../compiler');
+const { requireAuth, enforceTenantScope } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
+const { queueRuleSchema } = require('../validation/schemas');
 
 const router = express.Router();
 
-router.get('/api/clients/:id/queue-rules', (req, res) => {
+router.get('/api/clients/:id/queue-rules', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const rules = db.getQueueRules(req.params.id);
     res.json({ success: true, rules });
@@ -13,21 +16,18 @@ router.get('/api/clients/:id/queue-rules', (req, res) => {
   }
 });
 
-router.post('/api/clients/:id/queue-rules', (req, res) => {
+router.post('/api/clients/:id/queue-rules', requireAuth, enforceTenantScope, validateBody(queueRuleSchema), (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     const { timezone, iso_weekday, local_time } = req.body;
-    if (!iso_weekday || !local_time) {
-      return res.status(400).json({ success: false, error: 'iso_weekday (1-7) and local_time (HH:mm) are required' });
-    }
-    const rule = db.createQueueRule(clientId, timezone || 'UTC', parseInt(iso_weekday, 10), String(local_time).trim());
+    const rule = db.createQueueRule(clientId, timezone, iso_weekday, local_time);
     res.json({ success: true, rule });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.delete('/api/queue-rules/:id', (req, res) => {
+router.delete('/api/queue-rules/:id', requireAuth, (req, res) => {
   try {
     db.deleteQueueRule(req.params.id);
     res.json({ success: true });
@@ -36,7 +36,7 @@ router.delete('/api/queue-rules/:id', (req, res) => {
   }
 });
 
-router.get('/api/clients/:id/next-slot', (req, res) => {
+router.get('/api/clients/:id/next-slot', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
     const rules = db.getQueueRules(clientId);

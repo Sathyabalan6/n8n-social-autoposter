@@ -1,0 +1,84 @@
+const express = require('express');
+const { getStoredTokens } = require('../platforms/youtube');
+const { compilePost, YOUTUBE_CATEGORIES } = require('../compiler');
+const { checkPostgresHealth } = require('../db/postgres');
+const { isCloudStorageConfigured } = require('../media/storage');
+const { circuitBreaker } = require('../queue/circuit-breaker');
+const { requireAuth } = require('../middleware/auth');
+
+const router = express.Router();
+
+// Liveness Probe: Verifies process uptime
+router.get('/healthz', (_req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Readiness Probe: Verifies core database and storage dependencies
+router.get('/readyz', async (_req, res) => {
+  try {
+    const pgHealth = await checkPostgresHealth();
+    const storageConfigured = isCloudStorageConfigured();
+    const circuits = circuitBreaker.getStatus();
+
+    res.status(200).json({
+      status: 'ready',
+      database: {
+        sqlite: 'connected',
+        postgres: pgHealth
+      },
+      storage: {
+        cloud_s3_configured: storageConfigured
+      },
+      circuit_breakers: circuits,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'unready',
+      error: err.message
+    });
+  }
+});
+
+// Comprehensive Status & Platform Topology
+router.get('/api/status', (req, res) => {
+  const clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
+  const ytTokens = getStoredTokens(clientId);
+  res.json({
+    status: 'ok',
+    version: '2.0.0',
+    platforms: {
+      youtube: {
+        configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+        connected: Boolean(ytTokens?.refresh_token || ytTokens?.access_token)
+      },
+      x: { configured: Boolean(process.env.X_API_KEY) },
+      linkedin: { configured: Boolean(process.env.LINKEDIN_ACCESS_TOKEN) },
+      instagram: { configured: Boolean(process.env.META_ACCESS_TOKEN && process.env.INSTAGRAM_ACCOUNT_ID) },
+      threads: { configured: Boolean(process.env.THREADS_ACCESS_TOKEN) },
+      facebook: { configured: Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID) }
+    },
+    circuit_breakers: circuitBreaker.getStatus()
+  });
+});
+
+// YouTube Categories Taxonomy
+router.get('/api/youtube/categories', (_req, res) => {
+  res.json({ success: true, categories: YOUTUBE_CATEGORIES });
+});
+
+// Live Validation & Preview compiler
+router.post('/api/compile', requireAuth, (req, res) => {
+  try {
+    const compiled = compilePost(req.body);
+    res.json({ success: true, compiled });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+module.exports = router;

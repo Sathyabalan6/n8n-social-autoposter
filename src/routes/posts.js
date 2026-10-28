@@ -1,51 +1,28 @@
 const express = require('express');
 const db = require('../db');
-const { compilePost, YOUTUBE_CATEGORIES } = require('../compiler');
+const logger = require('../logger');
+const { ROLES } = require('../auth');
+const { requireAuth, enforceTenantScope } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
+const { reschedulePostSchema } = require('../validation/schemas');
+const { compilePost } = require('../compiler');
 const { dispatchPost, syncPostMetrics } = require('../platforms');
-const { getStoredTokens } = require('../platforms/youtube');
 const { uploadFields } = require('../middleware/upload');
 
 const router = express.Router();
 
-// 1. Health check & status
-router.get('/api/status', (req, res) => {
-  const clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
-  const ytTokens = getStoredTokens(clientId);
-  res.json({
-    status: 'ok',
-    version: '1.2.0',
-    platforms: {
-      youtube: {
-        configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-        connected: Boolean(ytTokens?.refresh_token || ytTokens?.access_token)
-      },
-      x: { configured: Boolean(process.env.X_API_KEY) },
-      linkedin: { configured: Boolean(process.env.LINKEDIN_ACCESS_TOKEN) },
-      instagram: { configured: Boolean(process.env.META_ACCESS_TOKEN && process.env.INSTAGRAM_ACCOUNT_ID) },
-      threads: { configured: Boolean(process.env.THREADS_ACCESS_TOKEN) },
-      facebook: { configured: Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID) }
+// 1. Create Post (Immediate or Scheduled)
+router.post('/api/posts', requireAuth, enforceTenantScope, uploadFields, async (req, res) => {
+  try {
+    const idempotencyKey = req.headers['idempotency-key'];
+    if (idempotencyKey) {
+      const cached = db.getIdempotencyKey(idempotencyKey);
+      if (cached && cached.response) {
+        logger.info({ idempotencyKey, postId: cached.post_id }, '[API] Idempotent replay hit');
+        return res.json(cached.response);
+      }
     }
-  });
-});
 
-// 1b. YouTube Categories Taxonomy
-router.get('/api/youtube/categories', (_req, res) => {
-  res.json({ success: true, categories: YOUTUBE_CATEGORIES });
-});
-
-// 2. Live Validation & Preview compiler
-router.post('/api/compile', (req, res) => {
-  try {
-    const compiled = compilePost(req.body);
-    res.json({ success: true, compiled });
-  } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
-
-// 3. Create / Submit Post (Immediate or Scheduled)
-router.post('/api/posts', uploadFields, async (req, res) => {
-  try {
     const body = req.body;
     let platforms = [];
     if (typeof body.platforms === 'string') {
@@ -97,7 +74,9 @@ router.post('/api/posts', uploadFields, async (req, res) => {
       }
     }
 
-    const clientId = body.client_id ? parseInt(body.client_id, 10) : 1;
+    const clientId = req.user.role === ROLES.OWNER && body.client_id
+      ? parseInt(body.client_id, 10)
+      : req.user.client_id;
 
     const postRecord = {
       ...compiled,
@@ -127,24 +106,43 @@ router.post('/api/posts', uploadFields, async (req, res) => {
       db.updatePostStatus(id, finalStatus, results, errorSummary);
     }
 
-    res.json({
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: clientId,
+      action: 'POST_CREATED',
+      entity_type: 'POST',
+      entity_id: id,
+      metadata: { platforms, status: postRecord.status },
+      ip_address: req.ip
+    });
+
+    const responsePayload = {
       success: true,
       postId: id,
       post: {
         id,
         ...postRecord
       }
-    });
+    };
+
+    if (idempotencyKey) {
+      db.saveIdempotencyKey(idempotencyKey, id, responsePayload, 86400);
+    }
+
+    res.json(responsePayload);
   } catch (err) {
-    console.error('Error creating post:', err);
+    logger.error({ err: err.message }, '[API] Error creating post');
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 4. List all posts (Queue & History, optionally filtered by client)
-router.get('/api/posts', (req, res) => {
+// 2. List posts
+router.get('/api/posts', requireAuth, (req, res) => {
   try {
-    const clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
+    let clientId = req.user.client_id;
+    if (req.user.role === ROLES.OWNER) {
+      clientId = req.query.clientId ? parseInt(req.query.clientId, 10) : null;
+    }
     const posts = db.getAllPosts(clientId);
     res.json({ success: true, posts });
   } catch (err) {
@@ -152,13 +150,17 @@ router.get('/api/posts', (req, res) => {
   }
 });
 
-// 5. Update / Edit post
-router.put('/api/posts/:id', uploadFields, async (req, res) => {
+// 3. Update / Edit post
+router.put('/api/posts/:id', requireAuth, enforceTenantScope, uploadFields, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const existing = db.getPostById(id);
     if (!existing) {
       return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    if (req.user.role !== ROLES.OWNER && existing.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
     }
 
     const body = req.body;
@@ -230,36 +232,56 @@ router.put('/api/posts/:id', uploadFields, async (req, res) => {
       linkedin_doc_path: liDocPath
     });
 
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: existing.client_id,
+      action: 'POST_UPDATED',
+      entity_type: 'POST',
+      entity_id: id,
+      ip_address: req.ip
+    });
+
     res.json({ success: true, postId: id });
   } catch (err) {
-    console.error('Error updating post:', err);
+    logger.error({ err: err.message }, '[API] Error updating post');
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 5b. Reschedule post (Atomic for Calendar Drag-and-Drop)
-router.patch('/api/posts/:id/schedule', (req, res) => {
+// 4. Atomic Reschedule
+router.patch('/api/posts/:id/schedule', requireAuth, enforceTenantScope, validateBody(reschedulePostSchema), (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { scheduled_at } = req.body;
-    if (!scheduled_at) {
-      return res.status(400).json({ success: false, error: 'scheduled_at is required' });
-    }
 
     const existing = db.getPostById(id);
     if (!existing) {
       return res.status(404).json({ success: false, error: 'Post not found' });
     }
 
+    if (req.user.role !== ROLES.OWNER && existing.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
+
     if (existing.status === 'completed') {
       return res.status(400).json({
         success: false,
-        error: 'Cannot reschedule a completed post. Please duplicate or create a new post to schedule again.'
+        error: 'Cannot reschedule a completed post. Duplicate or create a new post to schedule again.'
       });
     }
 
     const newStatus = existing.status === 'draft' ? 'draft' : 'scheduled';
     db.updatePostSchedule(id, scheduled_at, newStatus);
+
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: existing.client_id,
+      action: 'POST_RESCHEDULED',
+      entity_type: 'POST',
+      entity_id: id,
+      metadata: { scheduled_at },
+      ip_address: req.ip
+    });
 
     res.json({ success: true, id, scheduled_at, status: newStatus });
   } catch (err) {
@@ -267,12 +289,44 @@ router.patch('/api/posts/:id/schedule', (req, res) => {
   }
 });
 
-// --- POST PERFORMANCE METRICS ENDPOINTS ---
-router.get('/api/posts/:id/metrics', (req, res) => {
+// 5. Delete post
+router.delete('/api/posts/:id', requireAuth, enforceTenantScope, (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const post = db.getPostById(id);
+    if (!post) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    if (req.user.role !== ROLES.OWNER && post.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
+
+    db.deletePost(id);
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: post.client_id,
+      action: 'POST_DELETED',
+      entity_type: 'POST',
+      entity_id: id,
+      ip_address: req.ip
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Metrics & Snapshots
+router.get('/api/posts/:id/metrics', requireAuth, (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const post = db.getPostById(id);
     if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    if (req.user.role !== ROLES.OWNER && post.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
 
     const snapshots = db.getMetricsForPost(id);
     const latest = db.getLatestPostMetrics(id);
@@ -282,11 +336,15 @@ router.get('/api/posts/:id/metrics', (req, res) => {
   }
 });
 
-router.post('/api/posts/:id/sync-metrics', async (req, res) => {
+router.post('/api/posts/:id/sync-metrics', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const post = db.getPostById(id);
     if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    if (req.user.role !== ROLES.OWNER && post.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
 
     const result = await syncPostMetrics(post, 'MANUAL');
     const latest = db.getLatestPostMetrics(id);
@@ -296,12 +354,32 @@ router.post('/api/posts/:id/sync-metrics', async (req, res) => {
   }
 });
 
-// 6. Delete post
-router.delete('/api/posts/:id', (req, res) => {
+// 7. Retry Failed Post
+router.post('/api/posts/:id/retry', requireAuth, enforceTenantScope, async (req, res) => {
   try {
-    db.deletePost(req.params.id);
-    res.json({ success: true });
+    const id = parseInt(req.params.id, 10);
+    const existing = db.getPostById(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    if (existing.status === 'completed') {
+      return res.status(400).json({ success: false, error: 'Post is already successfully completed.' });
+    }
+
+    logger.info({ postId: id }, 'Retrying failed post dispatch');
+    const { results, finalStatus, errorSummary } = await dispatchPost(existing);
+    db.updatePostStatus(id, finalStatus, results, errorSummary);
+
+    res.json({
+      success: true,
+      postId: id,
+      status: finalStatus,
+      results,
+      error_summary: errorSummary
+    });
   } catch (err) {
+    logger.error({ postId: req.params.id, err: err.message }, 'Retry post dispatch failed');
     res.status(500).json({ success: false, error: err.message });
   }
 });

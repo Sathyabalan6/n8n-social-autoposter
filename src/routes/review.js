@@ -3,6 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const db = require('../db');
 const { generateApprovalToken, validateApprovalToken } = require('../crypto');
+const { ROLES } = require('../auth');
+const { requireAuth, enforceTenantScope } = require('../middleware/auth');
 
 const router = express.Router();
 const reviewTemplatePath = path.join(__dirname, '..', 'views', 'review.html');
@@ -24,11 +26,15 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-router.post('/api/posts/:id/request-approval', (req, res) => {
+router.post('/api/posts/:id/request-approval', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const postId = parseInt(req.params.id, 10);
     const post = db.getPostById(postId);
     if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    if (req.user && req.user.role !== ROLES.OWNER && post.client_id !== req.user.client_id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Access to this post is denied' });
+    }
 
     const { rawToken, tokenHash, expiresAt } = generateApprovalToken();
     db.setApprovalToken(postId, tokenHash, expiresAt);

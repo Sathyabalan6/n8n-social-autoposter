@@ -2,8 +2,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const multer = require('multer');
 
-// Setup uploads folder inside public
-const uploadDir = path.join(__dirname, '..', '..', 'public', 'uploads');
+// Setup uploads folder outside public web root
+const uploadDir = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

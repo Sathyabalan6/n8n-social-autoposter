@@ -1,7 +1,117 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const db = require('../db');
+const logger = require('../logger');
+const { generateToken, verifyPassword, hashPassword, ROLES } = require('../auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
+const { loginSchema, registerSchema } = require('../validation/schemas');
 const { getAuthUrl, handleAuthCallback } = require('../platforms/youtube');
 
 const router = express.Router();
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many authentication attempts, please try again in 15 minutes' }
+});
+
+router.post('/api/auth/login', authLimiter, validateBody(loginSchema), (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = db.getUserByEmail(email);
+
+    if (!user || !verifyPassword(password, user.password_hash)) {
+      logger.warn({ email, ip: req.ip }, '[Auth] Failed login attempt');
+      return res.status(401).json({ success: false, error: 'Invalid email or password' });
+    }
+
+    const token = generateToken(user, '24h');
+    db.logAudit({
+      user_id: user.id,
+      client_id: user.client_id,
+      action: 'USER_LOGIN',
+      entity_type: 'USER',
+      entity_id: user.id,
+      ip_address: req.ip
+    });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        client_id: user.client_id
+      }
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, '[Auth] Login error');
+    res.status(500).json({ success: false, error: 'Authentication service error' });
+  }
+});
+
+router.post('/api/auth/register', authLimiter, validateBody(registerSchema), (req, res) => {
+  try {
+    if (req.user && req.user.role !== ROLES.OWNER && req.user.role !== ROLES.ADMIN) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Insufficient privileges to register accounts' });
+    }
+
+    const { email, password, name, role, client_id } = req.body;
+    const existing = db.getUserByEmail(email);
+    if (existing) {
+      return res.status(400).json({ success: false, error: 'A user with this email already exists' });
+    }
+
+    const passwordHash = hashPassword(password);
+    const newUser = db.createUser({
+      email,
+      password_hash: passwordHash,
+      name,
+      role: role || ROLES.EDITOR,
+      client_id: client_id || 1
+    });
+
+    db.logAudit({
+      user_id: req.user?.sub || null,
+      client_id: client_id || 1,
+      action: 'USER_REGISTERED',
+      entity_type: 'USER',
+      entity_id: newUser.id,
+      metadata: { email, role: newUser.role },
+      ip_address: req.ip
+    });
+
+    res.json({ success: true, user: newUser });
+  } catch (err) {
+    logger.error({ err: err.message }, '[Auth] Registration error');
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/api/auth/me', requireAuth, (req, res) => {
+  const user = db.getUserById(req.user.sub);
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User profile not found' });
+  }
+  res.json({ success: true, user });
+});
+
+router.get('/api/users', requireAuth, requireRole(ROLES.OWNER, ROLES.ADMIN), (req, res) => {
+  try {
+    const clientId = req.user.role === ROLES.OWNER && req.query.clientId
+      ? parseInt(req.query.clientId, 10)
+      : req.user.client_id;
+    const users = db.getUsersByClient(clientId);
+    res.json({ success: true, users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 router.get('/auth/youtube', (req, res) => {
   try {

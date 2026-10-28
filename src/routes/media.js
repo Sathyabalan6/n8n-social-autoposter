@@ -1,31 +1,34 @@
 const express = require('express');
 const fs = require('node:fs');
 const path = require('node:path');
-const { inspectMedia, transcodeToVerticalInWorker, extractThumbnail } = require('../media/transcoder');
-const { isCloudStorageConfigured, generatePresignedUploadUrl } = require('../media/storage');
+const { ROLES } = require('../auth');
+const { requireAuth, enforceTenantScope } = require('../middleware/auth');
 const { upload, uploadDir } = require('../middleware/upload');
+const { isCloudStorageConfigured, generatePresignedUploadUrl } = require('../media/storage');
+const { inspectMedia, transcodeToVerticalInWorker, extractThumbnail } = require('../media/transcoder');
 
 const router = express.Router();
 
-router.get('/api/media/storage-status', (_req, res) => {
+router.get('/api/media/storage-status', requireAuth, (_req, res) => {
   res.json({ success: true, configured: isCloudStorageConfigured() });
 });
 
-router.post('/api/media/presign-upload', async (req, res) => {
+router.post('/api/media/presign-upload', requireAuth, enforceTenantScope, async (req, res) => {
   try {
     if (!isCloudStorageConfigured()) {
       return res.status(400).json({ success: false, error: 'Cloud storage is not configured in .env' });
     }
     const { filename, mimetype, tenantId } = req.body;
     if (!filename) return res.status(400).json({ success: false, error: 'filename is required' });
-    const { uploadUrl, objectKey } = await generatePresignedUploadUrl(filename, mimetype, tenantId || 'default');
+    const targetTenant = req.user.role === ROLES.OWNER ? (tenantId || String(req.user.client_id)) : String(req.user.client_id);
+    const { uploadUrl, objectKey } = await generatePresignedUploadUrl(filename, mimetype, targetTenant);
     res.json({ success: true, uploadUrl, objectKey });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.post('/api/media/inspect', upload.single('media'), async (req, res) => {
+router.post('/api/media/inspect', requireAuth, upload.single('media'), async (req, res) => {
   try {
     let filePath = req.file?.path;
     if (!filePath && req.body.filename) {
@@ -42,7 +45,7 @@ router.post('/api/media/inspect', upload.single('media'), async (req, res) => {
   }
 });
 
-router.post('/api/media/transcode/vertical', upload.single('media'), async (req, res) => {
+router.post('/api/media/transcode/vertical', requireAuth, upload.single('media'), async (req, res) => {
   try {
     let inputPath = req.file?.path;
     let originalName = req.file?.originalname || req.body.filename || 'video.mp4';
@@ -75,7 +78,7 @@ router.post('/api/media/transcode/vertical', upload.single('media'), async (req,
   }
 });
 
-router.post('/api/media/thumbnail', async (req, res) => {
+router.post('/api/media/thumbnail', requireAuth, async (req, res) => {
   try {
     const { filename, timestamp } = req.body;
     if (!filename) {
