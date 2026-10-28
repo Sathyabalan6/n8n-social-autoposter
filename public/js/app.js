@@ -20,6 +20,12 @@ import { setupClientsManager, fetchClients, registerWorkspaceChangeHandler } fro
 import { setupInboxUI, fetchInboxTasks } from './inbox.js';
 import { setupCalendar, renderCalendar } from './calendar.js';
 import { setupKeyboardShortcuts } from './shortcuts.js';
+import { mountAuthModal } from './components/authModal.js';
+import { mountChannelModal } from './components/channelModal.js';
+import { mountCalendarModal } from './components/calendarModal.js';
+import { mountMobileDrawer } from './components/mobileDrawer.js';
+import { mountComposerLenses } from './components/composerLenses.js';
+import { mountPreviewCards } from './components/previewCards.js';
 
 // Setup Mobile Preview Floating Drawer
 function setupMobilePreviewDrawer() {
@@ -68,6 +74,14 @@ registerPostActionListener((targetTabId) => {
 
 // App Initialization
 document.addEventListener('DOMContentLoaded', () => {
+  // Mount reusable modal & drawer components
+  mountAuthModal();
+  mountChannelModal();
+  mountCalendarModal();
+  mountMobileDrawer();
+  mountComposerLenses();
+  mountPreviewCards();
+
   setupNavigation();
   setupLensSwitcher();
   setupMasterMediaUpload();
