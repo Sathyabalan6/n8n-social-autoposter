@@ -244,6 +244,64 @@ export function openCalPostModal(post) {
     } else {
       metricsBox.style.display = 'none';
     }
+
+    let retryBox = document.getElementById('cal-modal-retry-box');
+    if (!retryBox && metricsBox.parentNode) {
+      retryBox = document.createElement('div');
+      retryBox.id = 'cal-modal-retry-box';
+      metricsBox.parentNode.insertBefore(retryBox, metricsBox);
+    }
+
+    if (retryBox) {
+      clearElement(retryBox);
+      if (post.status === 'failed' || post.status === 'partially_completed') {
+        retryBox.style.display = 'block';
+        retryBox.style.background = 'rgba(239, 68, 68, 0.08)';
+        retryBox.style.border = '1px solid rgba(239, 68, 68, 0.25)';
+        retryBox.style.borderRadius = '6px';
+        retryBox.style.padding = '10px 12px';
+        retryBox.style.marginBottom = '12px';
+
+        const errText = document.createElement('div');
+        errText.style.fontSize = '12px';
+        errText.style.color = 'var(--status-red)';
+        errText.style.marginBottom = '8px';
+        errText.textContent = `⚠️ Dispatch Failure: ${post.error_summary || 'One or more networks rejected dispatch.'}`;
+
+        const retryBtn = document.createElement('button');
+        retryBtn.className = 'btn btn-secondary';
+        retryBtn.style.fontSize = '12px';
+        retryBtn.style.padding = '4px 10px';
+        retryBtn.style.color = 'var(--status-amber)';
+        retryBtn.textContent = '🔄 Retry Failed Channels';
+        retryBtn.onclick = async () => {
+          retryBtn.disabled = true;
+          retryBtn.textContent = 'Retrying...';
+          try {
+            const res = await api.post(`/api/posts/${post.id}/retry`);
+            if (res.success) {
+              showToast(`Post #${post.id} retry resolved: ${res.status}`, 'success');
+              closeCalPostModal();
+              fetchQueue();
+              renderCalendar();
+            } else {
+              showToast(`Retry failed: ${res.error}`, 'error');
+              retryBtn.disabled = false;
+              retryBtn.textContent = '🔄 Retry Failed Channels';
+            }
+          } catch (err) {
+            showToast(`Retry error: ${err.message}`, 'error');
+            retryBtn.disabled = false;
+            retryBtn.textContent = '🔄 Retry Failed Channels';
+          }
+        };
+
+        retryBox.appendChild(errText);
+        retryBox.appendChild(retryBtn);
+      } else {
+        retryBox.style.display = 'none';
+      }
+    }
   }
 
   modal.style.display = 'flex';

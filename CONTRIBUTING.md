@@ -75,6 +75,10 @@ When contributing, preserve the following architectural standards:
    - Every platform adapter in `src/platforms/` must respect `post.results[platformKey]?.success` to prevent duplicate publishing on retry.
 4. **Link Decoupling:**
    - Preserve the Two-Stage Anti-Penalty dispatch engine so external URLs in body copy are decoupled into `first_comment`.
+5. **Zero-Build Frontend Architecture:**
+   - The dashboard runs entirely on browser-native ES modules (`public/js/*.js`) without Webpack, Vite, or npm bundlers.
+   - Preserves instant startup with zero frontend build steps and zero browser supply-chain vulnerabilities.
+   - New UI contributions should adhere to modular ES conventions (`import`/`export`) and avoid introducing heavyweight bundlers or frameworks.
 
 ---
 

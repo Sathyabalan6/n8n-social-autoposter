@@ -1,50 +1,40 @@
-# 🚀 SocialPulse Studio — Enterprise Social Media Publishing & Scheduling Platform
+# SocialPulse
 
-SocialPulse Studio is an enterprise-grade, self-hosted multi-channel social media publishing engine and visual editorial workbench built for marketing teams and agencies. Publish and schedule content across **YouTube (Videos & Shorts), X (Twitter), LinkedIn, Instagram, Threads, and Facebook** with complete data ownership.
+> A lightweight, self-hosted social media auto-poster and scheduling calendar for creators, marketers, and agencies.
 
-Built with an **architecture-first engineering philosophy**, SocialPulse Studio provides deterministic platform compilation, outbound link decoupling, media transcoding, granular Role-Based Access Control (RBAC) with Anti-IDOR tenant isolation, and a high-performance native embedded SQLite Write-Ahead Logging (WAL) engine with optional PostgreSQL enterprise schema migrations.
-
----
-
-## 🌟 Enterprise Highlights
-
-1. **Deterministic Multi-Platform Compilation (`compiler.js`):**
-   - **Accurate Counting:** Native `Intl.Segmenter` grapheme counting and UTF-8 byte bounds prevent silent API rejections.
-   - **Weighted Character Accounting:** Models X's 280-character limit with 23-character fixed URL weighting.
-   - **Anti-Penalty Link Decoupling:** Automatically extracts outbound URLs and schedules them as an automated **First Comment / Threaded Reply**, preventing feed ranking visibility penalties on X and LinkedIn.
-   - **Platform-Specific Gates:** YouTube Category ID resolution, COPPA compliance, AI synthetic media transparency flags, Instagram Reels trial mode, and LinkedIn PDF document carousels.
-
-2. **Enterprise Security & Cryptographic Vault (`crypto.js`):**
-   - **AES-256-GCM Envelope Encryption (SPV2):** All OAuth tokens and API secrets are encrypted at rest with random 16-byte salts generated per record and 310,000 PBKDF2-HMAC-SHA256 iterations (OWASP standard).
-   - **Password Security:** User passwords hashed using `scrypt` with 16-byte random salts and timing-safe verification.
-   - **Role-Based Access Control (RBAC):** 4-tier hierarchy (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`) with strict tenant data isolation (Anti-IDOR) preventing cross-workspace leakage.
-   - **Transport & DoS Protection:** Security headers via `helmet`, global rate limiting (300 req/min), and strict authentication limits (15 attempts/15 min).
-
-3. **High-Reliability Queue & Circuit Breakers (`scheduler.js`, `circuit-breaker.js`):**
-   - **Circuit Breakers:** Automatically detects repeated 5xx errors or HTTP 429 rate limits on external platform APIs, transitioning to `OPEN` state to prevent cascading API lockouts.
-   - **Exponential Backoff with Jitter:** Failed publishing attempts retry dynamically (`2^attempts * 60s + jitter`).
-   - **Dead-Letter Protection:** Automatically marks jobs as `failed` with diagnostic summaries after 5 attempts.
-   - **Graceful Shutdown:** Handles `SIGTERM`/`SIGINT`, draining active worker leases before terminating.
-
-4. **High-Performance Embedded Engine & Enterprise Migrations:**
-   - **Native Embedded Engine:** Embedded Node 24 `node:sqlite` running in WAL mode with 5-second busy timeouts and atomic worker lease locks. Zero external database or Redis required for standalone production.
-   - **Enterprise Schema:** Production PostgreSQL 16 schema (`postgres-schema.sql`) with Row-Level Security (RLS) definitions, connection pooling (`pg.Pool`), and foreign key cascades.
-
-5. **Compliance & Audit Logging:**
-   - **Immutable Audit Trail:** Logs all critical actions (logins, post creation, edits, deletions) with actor IDs and IP addresses.
-   - **GDPR Endpoints:** Built-in Data Subject Access Request (DSAR) export (`GET /api/clients/:id/export`) and Right to Erasure (`DELETE /api/clients/:id/erase`).
-
-6. **Interactive Editorial Calendar & Transcoding:**
-   - Drag-and-drop calendar planning (Month & Week views) with atomic rescheduling (`PATCH /api/posts/:id/schedule`).
-   - Pure Node `Intl.DateTimeFormat` recurring slot calculation with automatic Daylight Saving Time (DST) awareness.
-   - Embedded static FFmpeg/FFprobe binaries for aspect ratio probing, 16:9 to 9:16 vertical blur conversion, and thumbnail extraction on isolated worker threads.
+Publish and schedule content simultaneously to **YouTube, X (Twitter), LinkedIn, Instagram, Threads, and Facebook** with complete privacy and zero monthly subscription fees.
 
 ---
 
-## 🚀 Quick Start
+## Highlights
 
-### 1. Installation
+* **Multi-Platform Publishing in One Click:** Author once in the Master Composer, customize per-channel copy with live feed previews, and dispatch across all 6 networks simultaneously.
+* **Reach Shield (Anti-Penalty Link Decoupling):** Automatically extracts outbound URLs and schedules them as an automated first-comment or threaded reply, avoiding the organic reach penalty on X and LinkedIn.
+* **Drag-and-Drop Editorial Calendar:** Visually organize posts on an interactive monthly calendar. Reschedule posts simply by dragging chips to new dates.
+* **Recurring Queue Slots (Buffer-style):** Define posting schedules per day of the week (e.g. Mon & Wed at 9:30 AM). Choosing "Add to Queue" automatically reserves the next open slot.
+* **In-App Video Transcoding:** Automatically inspects uploaded media and converts horizontal 16:9 videos into 9:16 vertical shorts with blurred background padding using background worker threads.
+* **Zero-Build, Modern Architecture:** Pure Node.js and browser-native ES modules. No Webpack, no Vite, no heavy ORMs. Runs on an embedded SQLite database in WAL mode with zero external service dependencies.
+* **Client Workspaces & Encrypted Vault:** Manage multiple brand profiles with distinct color codes. All social API tokens are encrypted at rest using AES-256-GCM.
+* **Passwordless Client Approvals:** Generate single-use HMAC-SHA256 magic review links for clients to approve or reject scheduled drafts on mobile without needing an account.
 
+---
+
+## Supported Networks
+
+| Platform | Capabilities | Auth Method |
+| :--- | :--- | :--- |
+| **YouTube** | Videos & Shorts, Custom Thumbnails, Categories, COPPA flags, Comments | Google OAuth 2.0 |
+| **X (Twitter)** | Tweets, Chunked Media (4MB segments), Alt-text, Threaded Replies | OAuth 1.0a / Bearer |
+| **LinkedIn** | Posts, Images, Video, PDF Document Carousels, Comments | REST 202401 & UGC |
+| **Instagram** | Single Photo, Reels Video, Audio Branding, Trial Reels | Meta Graph API |
+| **Threads** | Text, Images, Video, Quote Posts, First Reply | Threads Graph API |
+| **Facebook** | Page Feed Posts, Direct Photo & Video Uploads, Comments | Meta Graph API |
+
+---
+
+## Quick Start (3 Steps)
+
+### 1. Clone & Install
 ```bash
 git clone https://github.com/Sathyabalan6/social-auto-post.git
 cd social-auto-post
@@ -52,142 +42,74 @@ npm install
 ```
 
 ### 2. Configure Environment
-
-Copy `.env.example` to `.env`:
-
 ```bash
 cp .env.example .env
 ```
-
-Set your configuration values:
-
+Generate an encryption secret (minimum 32 characters) for your local token vault:
 ```env
 PORT=3000
-HOST=127.0.0.1
 BASE_URL=http://localhost:3000
-
-# Required: Minimum 32-character encryption key for credential vault
-ENCRYPTION_SECRET=your_super_secret_vault_encryption_key_here_min_32_chars
-JWT_SECRET=your_jwt_signing_secret_here_min_32_chars
-
-# Initial Administrator Seed
+ENCRYPTION_SECRET=your_32_character_random_secret_here_12345
+JWT_SECRET=your_32_character_jwt_secret_here_12345
 ADMIN_EMAIL=admin@socialpulse.local
 ADMIN_PASSWORD=SocialPulseAdmin2026!
 ```
 
-### 3. Run the Test Suite
-
+### 3. Run the App
 ```bash
-npm test
-```
-
-### 4. Start the Application
-
-```bash
-# Production mode
+# Start server
 npm start
 
-# Development mode with auto-reload
+# Or start with auto-reload during development:
 npm run dev
 ```
-
-Open your browser at:  
-👉 **`http://localhost:3000`**
+Open **`http://localhost:3000`** in your browser. Pre-seeded demo posts and calendar slots are loaded on first launch so you can explore immediately.
 
 ---
 
-## 🐳 Docker Production Deployment
+## Testing Meta on Localhost (Free Cloudflare Tunnel)
 
-Run the production stack (SocialPulse Studio with persistent volumes and optional PostgreSQL 16):
+Meta's Graph API (Instagram & Facebook) requires a public HTTPS URL for image and video crawlers. You don't need to buy a domain or configure port forwarding:
+
+```bash
+# In a separate terminal, start a zero-config Cloudflare tunnel:
+npm run tunnel
+```
+Copy the generated `https://*.trycloudflare.com` URL into `BASE_URL` in your `.env` file, and local media uploads will ingest seamlessly.
+
+---
+
+## Docker Deployment
+
+To run with persistent volumes using Docker:
 
 ```bash
 docker compose up -d
 ```
-
-Check service health:
-
-```bash
-# Liveness probe
-curl http://localhost:3000/healthz
-
-# Readiness probe
-curl http://localhost:3000/readyz
-```
+The container runs an unprivileged non-root Node user with system FFmpeg and healthcheck monitoring enabled on `/healthz`.
 
 ---
 
-## 🏛️ System Architecture
+## Test Suite
 
-```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                               SocialPulse Studio Frontend                              │
-│   ┌────────────────────┬────────────────────┬─────────────────┬────────────────────┐   │
-│   │ Unified Composer   │ Editorial Calendar │ Queue & History │ Workspaces & APIs  │   │
-│   │ (Live Previews)    │ (Month/Week D&D)   │ (Status & Logs) │ (RBAC & Vault)     │   │
-│   └─────────┬──────────┴─────────┬──────────┴────────┬────────┴────────────┬───────┘   │
-└─────────────┼────────────────────┼───────────────────┼─────────────────────┼───────────┘
-              │                    │                   │                     │
-              ▼                    ▼                   ▼                     ▼
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              Express Enterprise Gateway                                │
-│  • Security Headers (Helmet)               • Rate Limiting (express-rate-limit)        │
-│  • JWT Auth & RBAC (`auth.js`)             • Anti-IDOR Tenant Scope Guard              │
-│  • Zod Request Validation                  • Idempotency Engine (`Idempotency-Key`)    │
-└──────────────────────────┬─────────────────────────────────────────────────────────────┘
-                           │
-        ┌──────────────────┼─────────────────────────┐
-        ▼                  ▼                         ▼
-┌───────────────┐  ┌───────────────────────┐  ┌──────────────────────────────────────────┐
-│ Persistence   │  │ Media Engine          │  │ Reliable Background Scheduler Daemon     │
-│ • SQLite (WAL)│  │ • FFmpeg / FFprobe    │  │ (`scheduler.js`)                         │
-│ • PostgreSQL  │  │ • Worker Thread       │  │ • Atomic Worker Lease Locking            │
-│   with RLS    │  │   Isolation           │  │ • Exponential Backoff with Jitter        │
-│ • Audit Logs  │  │ • 16:9 -> 9:16 Blur   │  │ • Circuit Breakers (`circuit-breaker.js`)│
-│ • Vault SPV2  │  │ • 24h Automated GC    │  │ • Dead-Letter Queue (Max 5 attempts)     │
-└───────────────┘  └───────────────────────┘  └────────────────────┬─────────────────────┘
-                                                                   │
-                                                                   ▼
-                                              ┌──────────────────────────────────────────┐
-                                              │ Platform Adapters (`src/platforms`)      │
-                                              ├──────────────────────────────────────────┤
-                                              │ • YouTube Data API v3 (Proactive Refresh)│
-                                              │ • X / Twitter API v2 (Chunked & Alt-Text)│
-                                              │ • LinkedIn REST Posts (Doc Carousels)    │
-                                              │ • Meta Instagram Graph & Reels Trial     │
-                                              │ • Meta Threads Graph API                 │
-                                              │ • Meta Facebook Pages Graph API          │
-                                              └──────────────────────────────────────────┘
-```
-
----
-
-## 🧪 Testing & Verification
-
-SocialPulse Studio includes an automated test suite verifying all 13 core subsystems:
+Run the full automated test suite (32 unit, integration, and platform adapter contract checks):
 
 ```bash
 npm test
 ```
 
-Verification coverage includes:
+---
 
-1. AES-256-GCM Envelope Encryption (SPV2) with dynamic salt
-2. Single-use HMAC-SHA256 tokens and timing-safe validation
-3. Compiler anti-penalty outbound link decoupling and category resolution
-4. Recurring dynamic queue slots projection across Daylight Saving Time shifts
-5. Database migrations, indexes, and constraints
-6. Platform dispatch registry and idempotency guards
-7. Time-series metrics snapshots and dual-snapshot analytics
-8. Actionable community inbox task states
-9. Scrypt password hashing and timing-safe verification
-10. JWT token signing, verification, and role hierarchy
-11. Zod request schema validation
-12. Immutable audit logging
-13. GDPR DSAR export and cascade erasure
-14. External API failure thresholds and circuit breaker tripping
+## Documentation
+
+* [API Reference](API_REFERENCE.md) — REST endpoint documentation and payload schemas.
+* [Deployment Guide](DEPLOYMENT_GUIDE.md) — Production setup for Ubuntu/VPS, PM2, Docker, and Nginx.
+* [Security Policy](SECURITY.md) — Vulnerability reporting, token encryption, and session boundaries.
+* [Architecture Notes](docs/architecture.md) — Design decisions, SQLite WAL concurrency, and queue mechanics.
+* [Contributing](CONTRIBUTING.md) — Development guidelines and pull request instructions.
 
 ---
 
-## 📄 License
+## License
 
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+Released under the [MIT License](LICENSE).

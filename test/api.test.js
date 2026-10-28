@@ -245,6 +245,18 @@ server.listen(0, '127.0.0.1', async () => {
     assert(reviewAfterApproval.text.includes('Approved'), 'Review page must reflect Approved state');
     console.log('   ✓ Single-use magic link generation, external review, and approval gate verified');
 
+    // ------------------------------------------------------------------------
+    // 8. Failed Post Retry & Diagnostics
+    // ------------------------------------------------------------------------
+    console.log('\n8. Testing Failed Post Retry & Diagnostics:');
+    const retryRes = await api(`/api/posts/${createdPostId}/retry`, {
+      method: 'POST',
+      token: adminToken
+    });
+    assert.strictEqual(retryRes.status, 200, 'POST /api/posts/:id/retry must return 200');
+    assert.strictEqual(retryRes.data.success, true);
+    console.log('   ✓ Post retry & diagnostics endpoint verified');
+
     // Cleanup test post
     await api(`/api/posts/${createdPostId}`, { method: 'DELETE', token: adminToken });
 

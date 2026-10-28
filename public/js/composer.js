@@ -642,6 +642,14 @@ export async function fetchQueue() {
       divText.textContent = post.master_text;
       tdContent.appendChild(divTitle);
       tdContent.appendChild(divText);
+      if (post.error_summary) {
+        const divErr = document.createElement('div');
+        divErr.style.fontSize = '11px';
+        divErr.style.color = 'var(--status-red)';
+        divErr.style.marginTop = '3px';
+        divErr.textContent = `⚠️ Error: ${post.error_summary}`;
+        tdContent.appendChild(divErr);
+      }
       tr.appendChild(tdContent);
 
       const tdChannels = document.createElement('td');
@@ -682,6 +690,35 @@ export async function fetchQueue() {
         aYt.style.marginRight = '4px';
         aYt.textContent = 'View YouTube ↗';
         tdActions.appendChild(aYt);
+      }
+
+      if (post.status === 'failed' || post.status === 'partially_completed') {
+        const btnRetry = document.createElement('button');
+        btnRetry.className = 'btn btn-secondary';
+        btnRetry.style.padding = '4px 10px';
+        btnRetry.style.fontSize = '12px';
+        btnRetry.style.marginRight = '4px';
+        btnRetry.style.color = 'var(--status-amber)';
+        btnRetry.textContent = '🔄 Retry';
+        btnRetry.addEventListener('click', async () => {
+          btnRetry.disabled = true;
+          btnRetry.textContent = 'Retrying...';
+          try {
+            const data = await api.post(`/api/posts/${post.id}/retry`);
+            if (data.success) {
+              showToast(`Post #${post.id} retry resolved: ${data.status}`, 'success');
+              fetchQueue();
+            } else {
+              showToast(`Retry failed: ${data.error}`, 'error');
+            }
+          } catch (err) {
+            showToast(`Retry error: ${err.message}`, 'error');
+          } finally {
+            btnRetry.disabled = false;
+            btnRetry.textContent = '🔄 Retry';
+          }
+        });
+        tdActions.appendChild(btnRetry);
       }
 
       const btnEdit = document.createElement('button');

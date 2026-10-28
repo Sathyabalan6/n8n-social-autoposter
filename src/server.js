@@ -930,6 +930,36 @@ app.post('/api/posts/:id/sync-metrics', requireAuth, async (req, res) => {
   }
 });
 
+// --- 5c. Retry Failed Channels for a Post ---
+app.post('/api/posts/:id/retry', requireAuth, enforceTenantScope, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const existing = db.getPostById(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    if (existing.status === 'completed') {
+      return res.status(400).json({ success: false, error: 'Post is already successfully completed.' });
+    }
+
+    logger.info({ postId: id }, 'Retrying failed post dispatch');
+    const { results, finalStatus, errorSummary } = await dispatchPost(existing);
+    db.updatePostStatus(id, finalStatus, results, errorSummary);
+
+    res.json({
+      success: true,
+      postId: id,
+      status: finalStatus,
+      results,
+      error_summary: errorSummary
+    });
+  } catch (err) {
+    logger.error({ postId: req.params.id, err: err.message }, 'Retry post dispatch failed');
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/clients/:id/inbox', requireAuth, enforceTenantScope, (req, res) => {
   try {
     const clientId = parseInt(req.params.id, 10);
