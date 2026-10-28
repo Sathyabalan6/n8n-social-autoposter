@@ -24,10 +24,22 @@ const reviewRoutes = require('./routes/review');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. Security Headers via Helmet
+// 1. Security Headers via Helmet (with CSP policy allowlisting fonts, media blobs, and dashboard scripts)
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+        mediaSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+        connectSrc: ["'self'", "https:", "http:", "ws:", "wss:"],
+        frameSrc: ["'self'"],
+        objectSrc: ["'none'"]
+      }
+    },
     crossOriginEmbedderPolicy: false
   })
 );
@@ -77,6 +89,20 @@ let server = null;
 
 // 9. Startup & Scheduler (when run directly)
 if (require.main === module) {
+  // Production Security Sanity Check: Refuse default credentials
+  if (process.env.NODE_ENV === 'production') {
+    const adminPass = process.env.ADMIN_PASSWORD || '';
+    if (!adminPass || adminPass === 'SocialPulseAdmin2026!' || adminPass === 'ChangeMeOnFirstBoot2026!') {
+      logger.error('[Security Fatal] In production (NODE_ENV=production), ADMIN_PASSWORD cannot be left as the default placeholder. Server refused to boot.');
+      process.exit(1);
+    }
+    const encSecret = process.env.ENCRYPTION_SECRET || '';
+    if (!encSecret || encSecret.length < 32 || encSecret.includes('your_super_secret')) {
+      logger.error('[Security Fatal] In production, ENCRYPTION_SECRET must be at least 32 characters and cannot be a placeholder. Server refused to boot.');
+      process.exit(1);
+    }
+  }
+
   startScheduler(60000);
 
   const HOST = process.env.HOST || '127.0.0.1';

@@ -1,5 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const multer = require('multer');
 
 // Setup uploads folder outside public web root
@@ -15,12 +16,12 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/pdf'
 ]);
 
-// Multer storage
+// Multer storage with cryptographically unguessable UUID filenames
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const unique = crypto.randomUUID();
     cb(null, `${unique}${ext}`);
   }
 });

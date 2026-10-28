@@ -1,12 +1,24 @@
 const express = require('express');
 const fs = require('node:fs');
 const path = require('node:path');
+const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const { generateApprovalToken, validateApprovalToken } = require('../crypto');
 const { ROLES } = require('../auth');
 const { requireAuth, enforceTenantScope } = require('../middleware/auth');
 
 const router = express.Router();
+
+const reviewLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many review requests, please try again in a minute.' }
+});
+
+router.use('/review', reviewLimiter);
+router.use('/api/review', reviewLimiter);
 const reviewTemplatePath = path.join(__dirname, '..', 'views', 'review.html');
 let reviewTemplate = '';
 

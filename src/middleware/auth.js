@@ -1,5 +1,14 @@
+const crypto = require('node:crypto');
 const { verifyToken, hasMinimumRole, ROLES } = require('../auth');
 const logger = require('../logger');
+
+function timingSafeMatch(provided, expected) {
+  if (!provided || !expected) return false;
+  const bufA = Buffer.from(String(provided));
+  const bufB = Buffer.from(String(expected));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 /**
  * Authentication Middleware: Extracts and validates Bearer token or API key
@@ -9,15 +18,19 @@ function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   const apiKeyHeader = req.headers['x-api-key'];
 
-  // Check API Key
-  if (configuredKey && (apiKeyHeader === configuredKey || authHeader === `Bearer ${configuredKey}`)) {
-    req.user = {
-      sub: 1,
-      role: ROLES.OWNER,
-      client_id: 1,
-      name: 'API Key Admin'
-    };
-    return next();
+  // Check API Key with constant-time equality
+  if (configuredKey) {
+    const isHeaderMatch = timingSafeMatch(apiKeyHeader, configuredKey);
+    const isBearerMatch = authHeader?.startsWith('Bearer ') && timingSafeMatch(authHeader.slice(7).trim(), configuredKey);
+    if (isHeaderMatch || isBearerMatch) {
+      req.user = {
+        sub: 1,
+        role: ROLES.OWNER,
+        client_id: 1,
+        name: 'API Key Admin'
+      };
+      return next();
+    }
   }
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -143,7 +156,7 @@ function apiKeyAuth(req, res, next) {
   const queryKey = req.query.apiKey;
 
   const providedKey = headerKey || bearerToken || queryKey;
-  if (providedKey && providedKey === configuredKey) {
+  if (providedKey && timingSafeMatch(providedKey, configuredKey)) {
     return next();
   }
 
