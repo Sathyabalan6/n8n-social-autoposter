@@ -1,5 +1,5 @@
 ---
-name: SocialPulse Studio CI
+name: SocialPulse Studio Enterprise CI
 
 on:
   push:
@@ -21,18 +21,34 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Security Vulnerability Audit
+        run: npm audit --audit-level=high
 
       - name: Validate JavaScript Syntax
         run: |
-          node -c src/server.js src/db.js src/compiler.js src/crypto.js \
-            src/scheduler.js src/platforms/*.js src/media/*.js \
-            src/middleware/*.js src/routes/*.js
+          node -c src/server.js \
+            src/db.js \
+            src/auth.js \
+            src/logger.js \
+            src/compiler.js \
+            src/crypto.js \
+            src/scheduler.js \
+            src/middleware/*.js \
+            src/validation/schemas.js \
+            src/db/postgres.js \
+            src/queue/circuit-breaker.js \
+            src/platforms/*.js \
+            src/media/*.js
 
-      - name: Run Test Suite
+      - name: Run Enterprise Test Suite
         run: npm test
         env:
           ENCRYPTION_SECRET: >-
             0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          JWT_SECRET: test_jwt_super_secret_signing_key_for_ci_2026
+          NODE_ENV: test

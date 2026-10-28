@@ -68,7 +68,7 @@ Every major architectural decision in SocialPulse Studio was deliberately evalua
 
 | Architectural Choice | What We Chose | Alternative Rejected | Why We Rejected the Alternative |
 | :--- | :--- | :--- | :--- |
-| **Data Engine** | **Embedded `node:sqlite` (WAL Mode)** | PostgreSQL + Redis + Docker | Docker Compose stacks require 2GB–4GB RAM, cost $30–$50/mo, and require container maintenance. SQLite in WAL mode executes in-process with microsecond latency, idles at **~45MB RAM**, runs on a $4/mo VPS, and backs up via a single file. |
+| **Data Engine** | **Dual Mode: Embedded SQLite (WAL Mode) OR PostgreSQL (with RLS)** | Proprietary Managed Databases | Developers can run instantly with zero dependencies on embedded SQLite, or scale horizontally in production using PostgreSQL 16 with Row-Level Security and connection pooling. |
 | **Code Ownership & Licensing** | **100% Custom Engine (MIT License)** | Forking Postiz (AGPL-3.0) | Postiz is copyleft AGPL-3.0. Modifying it and offering it as a service legally forces you to open-source your proprietary code. Building our own engine guarantees **100% commercial ownership**. |
 | **Hosting Model** | **Self-Hosted VPS ($4–$5/mo)** | AWS Serverless (Lambda + SQS) | Serverless architectures introduce unpredictable cloud bills, cold starts, and 6MB API Gateway payload limits. A fixed-cost VPS provides predictable unit economics. |
 | **Comment Management** | **Native Phone Apps + Deep Links** | Unofficial Scrapers / Cookie Bots | Reverse-engineering private APIs (`li_at`, `sessionid`) triggers Akamai TLS JA4 fingerprinting, CDP proxy traps, costs $15–$30/GB in mobile proxies, and **risks permanently banning client social accounts**. |
@@ -102,10 +102,33 @@ WHERE id = ? AND (status = 'scheduled' OR (status = 'claimed' AND locked_until <
 ```
 If multiple worker threads or cluster instances execute simultaneously, only one worker receives a non-zero `changes` count. If a worker process crashes mid-dispatch, the lease expires after 45 seconds, allowing another worker to re-claim the post.
 
-### 3.3. Security & Encrypted Credential Vault
-- Social account tokens and secrets are encrypted at rest in `social_accounts.encrypted_tokens` using **AES-256-GCM**.
-- Key derivation utilizes PBKDF2 with 100,000 iterations and per-record cryptographic salts.
+### 3.3. Security & Encrypted Credential Vault (SPV2)
+- Social account tokens and secrets are encrypted at rest using **AES-256-GCM Envelope Encryption (SPV2)**.
+- Key derivation utilizes PBKDF2-HMAC-SHA256 with **310,000 iterations** (OWASP standard) and unique 16-byte cryptographically random salts generated per record (`crypto.randomBytes(16)`).
+- Envelope format: `[SPV2 (4B)][SALT (16B)][IV (12B)][AUTHTAG (16B)][CIPHERTEXT]`.
 - Authenticated decryption verifies the GCM 128-bit authentication tag to prevent ciphertext tampering.
+- User passwords are securely hashed using native `scrypt` with 16-byte random salts and verified via `crypto.timingSafeEqual()`.
+- Four-tier Role-Based Access Control (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`) and Anti-IDOR middleware strictly isolate client workspaces.
+
+### 3.4. Dual-Mode Persistence & PostgreSQL Row-Level Security (RLS)
+In enterprise production deployments, SocialPulse connects to PostgreSQL (`DATABASE_URL`):
+- Connection pooling is managed via `pg.Pool` with connection timeouts and idle reclamation.
+- Schema migrations (`postgres-schema.sql`) create relational foreign key cascades and performance indexes on `posts`, `social_accounts`, and `audit_logs`.
+- **Row-Level Security (RLS)** is enforced at the database kernel level:
+```sql
+CREATE POLICY tenant_isolation_posts ON posts
+    FOR ALL
+    USING (
+        current_setting('app.is_owner', true) = 'true' OR
+        client_id = NULLIF(current_setting('app.current_client_id', true), '')::integer
+    );
+```
+
+### 3.5. Circuit Breakers & Queue Reliability
+- External platform APIs are wrapped with an in-memory circuit breaker (`src/queue/circuit-breaker.js`).
+- If an API returns consecutive 5xx errors or HTTP 429 rate limits, the circuit trips to `OPEN`, immediately deferring pending requests to prevent API quota bans.
+- Failed background jobs retry using exponential backoff with random jitter (`2^attempts * 60s + jitter`).
+- Posts exceeding 5 attempts are automatically transitioned to a `failed` dead-letter state.
 
 ---
 

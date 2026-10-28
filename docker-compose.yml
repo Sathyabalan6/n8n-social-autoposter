@@ -1,28 +1,33 @@
 ---
 services:
-  socialpulse:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: socialpulse-studio
+    container_name: socialpulse-app
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
+      - NODE_ENV=production
       - PORT=3000
       - HOST=0.0.0.0
       - BASE_URL=${BASE_URL:-http://localhost:3000}
+      - SQLITE_PATH=/app/data/posts.sqlite
       - ENCRYPTION_SECRET=${ENCRYPTION_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
       - API_KEY=${API_KEY:-}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@socialpulse.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-SocialPulseAdmin2026!}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
       - X_API_KEY=${X_API_KEY:-}
       - X_API_SECRET=${X_API_SECRET:-}
       - X_ACCESS_TOKEN=${X_ACCESS_TOKEN:-}
       - X_ACCESS_SECRET=${X_ACCESS_SECRET:-}
       - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN:-}
-      - LINKEDIN_PERSON_URN=${LINKEDIN_PERSON_URN:-}
       - META_ACCESS_TOKEN=${META_ACCESS_TOKEN:-}
       - META_PAGE_ID=${META_PAGE_ID:-}
       - INSTAGRAM_ACCOUNT_ID=${INSTAGRAM_ACCOUNT_ID:-}
@@ -31,14 +36,12 @@ services:
       - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
       - R2_SECRET_KEY=${R2_SECRET_KEY:-}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME:-}
+    security_opt:
+      - no-new-privileges:true
     volumes:
-      - ./posts.sqlite:/app/posts.sqlite
-      - ./posts.sqlite-wal:/app/posts.sqlite-wal
-      - ./posts.sqlite-shm:/app/posts.sqlite-shm
-      - ./public/uploads:/app/public/uploads
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/status"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - app-uploads:/app/public/uploads
+      - app-data:/app/data
+
+volumes:
+  app-data:
+  app-uploads:
