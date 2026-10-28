@@ -1,6 +1,42 @@
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const { google } = require('googleapis');
 const db = require('../db');
+
+function generateOAuthState(clientId = '1') {
+  const secret = process.env.ENCRYPTION_SECRET || 'socialpulse-oauth-state-secret';
+  const timestamp = Date.now();
+  const raw = `${clientId}:${timestamp}`;
+  const sig = crypto.createHmac('sha256', secret).update(raw).digest('hex').slice(0, 16);
+  return `${raw}:${sig}`;
+}
+
+function verifyOAuthState(stateParam) {
+  if (!stateParam) return { valid: false, clientId: 1 };
+  const parts = stateParam.split(':');
+  if (parts.length !== 3) {
+    // Backward compatibility for integer state
+    const parsed = parseInt(stateParam, 10);
+    return { valid: !isNaN(parsed), clientId: parsed || 1 };
+  }
+
+  const [clientId, timestamp, sig] = parts;
+  const time = parseInt(timestamp, 10);
+  if (isNaN(time) || Date.now() - time > 30 * 60 * 1000) {
+    return { valid: false, clientId: parseInt(clientId, 10) || 1 };
+  }
+
+  const secret = process.env.ENCRYPTION_SECRET || 'socialpulse-oauth-state-secret';
+  const raw = `${clientId}:${timestamp}`;
+  const expectedSig = crypto.createHmac('sha256', secret).update(raw).digest('hex').slice(0, 16);
+
+  try {
+    const isValid = crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig));
+    return { valid: isValid, clientId: parseInt(clientId, 10) || 1 };
+  } catch {
+    return { valid: false, clientId: parseInt(clientId, 10) || 1 };
+  }
+}
 
 function getOAuth2Client() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -59,14 +95,14 @@ function getAuthUrl(clientId = null) {
     access_type: 'offline',
     scope: scopes,
     prompt: 'consent',
-    state: clientId ? String(clientId) : '1'
+    state: generateOAuthState(clientId || '1')
   });
 }
 
 async function handleAuthCallback(code, stateParam = null) {
   const oauth2Client = getOAuth2Client();
   const { tokens } = await oauth2Client.getToken(code);
-  const clientId = stateParam ? parseInt(stateParam, 10) : 1;
+  const { clientId } = verifyOAuthState(stateParam);
   saveTokens(tokens, clientId, 'YouTube Channel');
   return tokens;
 }
@@ -210,7 +246,7 @@ async function publishYouTube(post) {
     }
   };
 
-  const notifySubscribers = post.youtube_notify_subscribers !== undefined ? Boolean(post.youtube_notify_subscribers) : true;
+  const notifySubscribers = post.youtube_notify_subscribers === undefined ? true : Boolean(post.youtube_notify_subscribers);
 
   const media = {
     body: fs.createReadStream(mediaPath)
@@ -331,6 +367,8 @@ async function replyToYouTubeComment(commentThreadId, replyText, clientId = null
 
 module.exports = {
   getAuthUrl,
+  generateOAuthState,
+  verifyOAuthState,
   handleAuthCallback,
   getStoredTokens,
   saveTokens,

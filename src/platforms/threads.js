@@ -118,22 +118,27 @@ async function publishThreads(post) {
       }
     }
 
-    // Step 1: Create container
-    const containerRes = await fetch('https://graph.threads.net/v1.0/me/threads', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(containerPayload)
-    });
+    // Idempotent Reconciliation: If container was already created on prior attempt, resume without recreating
+    let creationId = post.results?.threads?.creationId;
 
-    const containerData = await containerRes.json();
-    if (!containerRes.ok) {
-      const errMsg = containerData.error?.message || `HTTP ${containerRes.status}`;
-      return { platform: 'threads', success: false, error: errMsg };
-    }
-
-    const creationId = containerData.id;
     if (!creationId) {
-      return { platform: 'threads', success: false, error: 'Threads API did not return container ID.' };
+      // Step 1: Create container
+      const containerRes = await fetch('https://graph.threads.net/v1.0/me/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(containerPayload)
+      });
+
+      const containerData = await containerRes.json();
+      if (!containerRes.ok) {
+        const errMsg = containerData.error?.message || `HTTP ${containerRes.status}`;
+        return { platform: 'threads', success: false, error: errMsg };
+      }
+
+      creationId = containerData.id;
+      if (!creationId) {
+        return { platform: 'threads', success: false, error: 'Threads API did not return container ID.' };
+      }
     }
 
     // If media was provided, poll container status until FINISHED
@@ -191,6 +196,7 @@ async function publishThreads(post) {
     return {
       platform: 'threads',
       success: true,
+      creationId,
       postId,
       url: `https://www.threads.net/post/${postId}`,
       hasMedia: Boolean(hasMedia)

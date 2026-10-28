@@ -6,7 +6,7 @@ const { generateToken, verifyPassword, hashPassword, ROLES } = require('../auth'
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { validateBody } = require('../middleware/validate');
 const { loginSchema, registerSchema } = require('../validation/schemas');
-const { getAuthUrl, handleAuthCallback } = require('../platforms/youtube');
+const { getAuthUrl, handleAuthCallback, verifyOAuthState } = require('../platforms/youtube');
 
 const router = express.Router();
 
@@ -143,6 +143,12 @@ router.get('/auth/youtube/callback', async (req, res) => {
   const stateParam = req.query.state;
   if (!code) {
     return res.status(400).send('Missing authorization code from Google.');
+  }
+
+  const { valid } = verifyOAuthState(stateParam);
+  if (!valid) {
+    logger.warn({ stateParam }, '[OAuth] State parameter verification failed (potential CSRF)');
+    return res.status(403).send('OAuth verification failed: Invalid or expired state parameter.');
   }
 
   try {

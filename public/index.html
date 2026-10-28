@@ -134,7 +134,14 @@
               <div class="lens-pane" id="panel-master">
                 <div class="field-row">
                   <div class="field-header">
-                    <label class="form-label" for="master_text">Master Copy</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <label class="form-label" for="master_text">Master Copy</label>
+                      <div class="format-toolbar" style="display: inline-flex; gap: 4px; margin-left: 6px;">
+                        <button type="button" class="btn btn-ghost" id="btn-format-bold" title="Bold (Unicode for X/LinkedIn)" style="padding: 1px 6px; font-weight: bold; font-size: 11px; border: 1px solid var(--border-default); border-radius: 4px;">B</button>
+                        <button type="button" class="btn btn-ghost" id="btn-format-italic" title="Italic (Unicode for X/LinkedIn)" style="padding: 1px 6px; font-style: italic; font-size: 11px; border: 1px solid var(--border-default); border-radius: 4px;">I</button>
+                        <button type="button" class="btn btn-ghost" id="btn-format-mono" title="Monospace (Unicode)" style="padding: 1px 6px; font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--border-default); border-radius: 4px;">M</button>
+                      </div>
+                    </div>
                     <span class="char-count" id="master-char-count">0 chars</span>
                   </div>
                   <textarea id="master_text" class="seamless-editor" placeholder="Write your core content here. Automatically adapts across selected channels..."></textarea>

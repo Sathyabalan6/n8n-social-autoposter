@@ -405,10 +405,61 @@ export function setupPlatformCustomMedia() {
   });
 }
 
+export function applyUnicodeFormat(formatType) {
+  const textarea = el.masterText;
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selected = textarea.value.slice(start, end);
+  if (!selected) {
+    showToast('Highlight text first to format as Bold or Italic.', 'info');
+    return;
+  }
+
+  let formatted = selected;
+  if (formatType === 'bold') {
+    formatted = selected.replace(/[A-Za-z0-9]/g, (c) => {
+      const code = c.charCodeAt(0);
+      if (code >= 65 && code <= 90) return String.fromCodePoint(0x1D400 + (code - 65));
+      if (code >= 97 && code <= 122) return String.fromCodePoint(0x1D41A + (code - 97));
+      if (code >= 48 && code <= 57) return String.fromCodePoint(0x1D7CE + (code - 48));
+      return c;
+    });
+  } else if (formatType === 'italic') {
+    formatted = selected.replace(/[A-Za-z]/g, (c) => {
+      const code = c.charCodeAt(0);
+      if (c === 'h') return 'ℎ';
+      if (code >= 65 && code <= 90) return String.fromCodePoint(0x1D434 + (code - 65));
+      if (code >= 97 && code <= 122) return String.fromCodePoint(0x1D44E + (code - 97));
+      return c;
+    });
+  } else if (formatType === 'mono') {
+    formatted = selected.replace(/[A-Za-z0-9]/g, (c) => {
+      const code = c.charCodeAt(0);
+      if (code >= 65 && code <= 90) return String.fromCodePoint(0x1D670 + (code - 65));
+      if (code >= 97 && code <= 122) return String.fromCodePoint(0x1D68A + (code - 97));
+      if (code >= 48 && code <= 57) return String.fromCodePoint(0x1D7F6 + (code - 48));
+      return c;
+    });
+  }
+
+  textarea.setRangeText(formatted, start, end, 'select');
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  showToast(`Formatted as ${formatType}.`, 'success');
+}
+
 export function setupComposerActions() {
   if (el.btnPublishFinal) el.btnPublishFinal.addEventListener('click', () => submitPost('publish'));
   if (el.btnSaveDraft) el.btnSaveDraft.addEventListener('click', () => submitPost('draft'));
   if (el.btnRefreshQueue) el.btnRefreshQueue.addEventListener('click', fetchQueue);
+
+  const btnBold = document.getElementById('btn-format-bold');
+  const btnItalic = document.getElementById('btn-format-italic');
+  const btnMono = document.getElementById('btn-format-mono');
+  if (btnBold) btnBold.addEventListener('click', () => applyUnicodeFormat('bold'));
+  if (btnItalic) btnItalic.addEventListener('click', () => applyUnicodeFormat('italic'));
+  if (btnMono) btnMono.addEventListener('click', () => applyUnicodeFormat('mono'));
 }
 
 export async function submitPost(action = 'publish') {

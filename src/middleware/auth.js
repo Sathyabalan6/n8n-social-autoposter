@@ -96,6 +96,7 @@ function requireRole(...allowedRoles) {
 
 /**
  * Guard: Tenant Data Isolation (Anti-IDOR)
+ * Centralized resolver with deny-by-default policy.
  * Ensures non-OWNER users can never view, update, or delete another client's assets.
  */
 function enforceTenantScope(req, res, next) {
@@ -103,36 +104,44 @@ function enforceTenantScope(req, res, next) {
     return res.status(401).json({ success: false, error: 'Unauthorized: Authentication required' });
   }
 
+  // 1. Resolve target tenant ID from any route parameter, query, or body
+  let targetTenantId = null;
+  if (req.params?.clientId) {
+    targetTenantId = Number.parseInt(req.params.clientId, 10);
+  } else if (req.path.includes('/clients/') && req.params?.id) {
+    targetTenantId = Number.parseInt(req.params.id, 10);
+  } else if (req.query?.clientId) {
+    targetTenantId = Number.parseInt(req.query.clientId, 10);
+  } else if (req.body && req.body.client_id) {
+    targetTenantId = Number.parseInt(req.body.client_id, 10);
+  }
+
+  // 2. OWNER role can access any valid tenant, or defaults to their own
   if (req.user.role === ROLES.OWNER) {
-    return next(); // Owners can manage all client workspaces
+    req.scopedClientId = targetTenantId || req.user.client_id || 1;
+    req.tenantId = req.scopedClientId;
+    return next();
   }
 
+  // 3. Non-OWNER role: Must belong to a valid client workspace
   const userClientId = req.user.client_id;
-
-  // Check URL parameter if route is scoped by client (e.g. /api/clients/:id/...)
-  const routeClientId = req.params?.clientId || (req.path.includes('/clients/') ? req.params?.id : null);
-  if (routeClientId) {
-    const parsedId = Number.parseInt(routeClientId, 10);
-    if (!Number.isNaN(parsedId) && parsedId !== userClientId) {
-      return res.status(403).json({ success: false, error: 'Forbidden: Access to requested client workspace is denied' });
-    }
+  if (!userClientId) {
+    logger.warn({ userId: req.user.sub, path: req.path }, 'Tenant resolution failed: user has no assigned client_id');
+    return res.status(403).json({ success: false, error: 'Forbidden: User is not assigned to a client workspace' });
   }
 
-  // Check query parameter
-  if (req.query.clientId && Number.parseInt(req.query.clientId, 10) !== userClientId) {
+  // 4. Deny-by-default: If a specific tenant was requested and doesn't match user's client, HALT
+  if (targetTenantId && targetTenantId !== userClientId) {
+    logger.warn({ userId: req.user.sub, userClientId, targetTenantId, path: req.path }, 'Cross-tenant IDOR access blocked');
     return res.status(403).json({ success: false, error: 'Forbidden: Access to requested client workspace is denied' });
   }
 
-  // Check body parameter if modifying or creating
-  if (req.body && req.body.client_id && Number.parseInt(req.body.client_id, 10) !== userClientId) {
-    return res.status(403).json({ success: false, error: 'Forbidden: Cannot create or modify resources outside assigned workspace' });
-  }
-
-  // Force workspace scope to user's client_id
+  // 5. Force tenant scope to user's authorized client_id
   if (req.body && typeof req.body === 'object') {
     req.body.client_id = userClientId;
   }
   req.scopedClientId = userClientId;
+  req.tenantId = userClientId;
 
   next();
 }
