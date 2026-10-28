@@ -31,6 +31,9 @@
     "url": "https://github.com/Sathyabalan6/social-auto-post/issues"
   },
   "homepage": "https://github.com/Sathyabalan6/social-auto-post#readme",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1155.0",
     "@aws-sdk/s3-request-presigner": "^3.1155.0",

@@ -12,7 +12,7 @@ const db = require('../db');
 const { publishYouTube, postYouTubeFirstComment, fetchYouTubeMetrics, fetchRecentYouTubeComments, replyToYouTubeComment } = require('./youtube');
 const { publishX, postXFirstReply, fetchXMetrics } = require('./x');
 const { publishLinkedIn, postLinkedInFirstComment } = require('./linkedin');
-const { isCloudStorageConfigured, uploadLocalFileToCloud } = require('../media/storage');
+const { isCloudStorageConfigured, uploadLocalFileToCloud, generateSignedLocalMediaUrl } = require('../media/storage');
 
 function getClientPlatformTokens(clientId, platform) {
   if (!clientId) return null;
@@ -185,7 +185,7 @@ async function resolvePlatformMediaUrl(mediaPath) {
 
   const baseUrl = process.env.BASE_URL;
   if (baseUrl && !baseUrl.includes('localhost') && !baseUrl.includes('127.0.0.1')) {
-    return `${baseUrl.replace(/\/$/, '')}/uploads/${path.basename(mediaPath)}`;
+    return generateSignedLocalMediaUrl(path.basename(mediaPath), 86400);
   }
 
   return null;

@@ -358,6 +358,15 @@ const stmtGetPendingScheduledPosts = db.prepare(`SELECT id, scheduled_at FROM po
 // Approval Workflow Statements
 const stmtSetApprovalToken = db.prepare(`UPDATE posts SET approval_token_hash = ?, token_expires_at = ?, workflow_state = ?, updated_at = ? WHERE id = ?`);
 const stmtSetWorkflowState = db.prepare(`UPDATE posts SET workflow_state = ?, approval_token_hash = NULL, updated_at = ? WHERE id = ?`);
+const stmtConsumeApprovalToken = db.prepare(`
+  UPDATE posts 
+  SET workflow_state = ?, 
+      approval_token_hash = NULL, 
+      token_expires_at = 0,
+      status = CASE WHEN ? = 'APPROVED' THEN 'scheduled' ELSE status END,
+      updated_at = ?
+  WHERE id = ? AND approval_token_hash = ? AND token_expires_at > ?
+`);
 
 // Metrics Snapshots Statements (Time-Series Dual-Snapshot Engine)
 const stmtInsertMetricsSnapshot = db.prepare(`
@@ -765,6 +774,11 @@ module.exports = {
     const now = new Date().toISOString();
     stmtSetWorkflowState.run(workflowState, now, postId);
     return true;
+  },
+  consumeApprovalToken: (postId, tokenHash, workflowState = 'APPROVED') => {
+    const now = new Date();
+    const result = stmtConsumeApprovalToken.run(workflowState, workflowState, now.toISOString(), postId, tokenHash, now.getTime());
+    return result.changes > 0;
   },
   // Metrics Snapshot API
   saveMetricsSnapshot: (postId, platform, snapshotType, metrics = {}) => {

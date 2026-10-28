@@ -6,6 +6,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 let s3Sdk = null;
 
@@ -141,9 +142,52 @@ async function uploadLocalFileToCloud(localFilePath, objectKey = null, contentTy
   };
 }
 
+/**
+ * 4. Generates a signed, short-lived HMAC URL for local disk uploads
+ */
+function generateSignedLocalMediaUrl(filename, expiresInSec = 900) {
+  const secret = process.env.ENCRYPTION_SECRET || 'socialpulse-local-media-signing-secret';
+  const expiresAt = Math.floor(Date.now() / 1000) + expiresInSec;
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(`${filename}:${expiresAt}`)
+    .digest('hex')
+    .slice(0, 32);
+
+  const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+  return `${baseUrl.replace(/\/$/, '')}/uploads/${encodeURIComponent(filename)}?sig=${signature}&exp=${expiresAt}`;
+}
+
+/**
+ * Validates signed local media URL HMAC signature and TTL
+ */
+function verifySignedLocalMediaUrl(filename, signature, expTimestamp) {
+  if (!filename || !signature || !expTimestamp) return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (parseInt(expTimestamp, 10) < nowSec) return false;
+
+  const secret = process.env.ENCRYPTION_SECRET || 'socialpulse-local-media-signing-secret';
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(`${filename}:${expTimestamp}`)
+    .digest('hex')
+    .slice(0, 32);
+
+  try {
+    const bufSig = Buffer.from(signature);
+    const bufExp = Buffer.from(expected);
+    if (bufSig.length !== bufExp.length) return false;
+    return crypto.timingSafeEqual(bufSig, bufExp);
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
   isCloudStorageConfigured,
   generatePresignedUploadUrl,
   getPublicMediaUrl,
-  uploadLocalFileToCloud
+  uploadLocalFileToCloud,
+  generateSignedLocalMediaUrl,
+  verifySignedLocalMediaUrl
 };

@@ -113,7 +113,10 @@ server.listen(0, '127.0.0.1', async () => {
 
     const unauthPresign = await api('/api/media/presign-upload', { method: 'POST', body: { filename: 'test.mp4' } });
     assert.strictEqual(unauthPresign.status, 401, 'POST /api/media/presign-upload must require authentication');
-    console.log('   ✓ All sensitive mutating & data endpoints rejected unauthenticated requests (401)');
+
+    const unauthUpload = await api('/uploads/secret-file.mp4');
+    assert.strictEqual(unauthUpload.status, 403, 'Unauthenticated access to /uploads must be blocked with 403');
+    console.log('   ✓ All sensitive mutating & data endpoints rejected unauthenticated requests (401/403)');
 
     // ------------------------------------------------------------------------
     // 4. Authentication Flow (Login & Token Issuance)
@@ -248,7 +251,14 @@ server.listen(0, '127.0.0.1', async () => {
     // Review page after approval -> should show Approved
     const reviewAfterApproval = await api(`/review/${createdPostId}?token=${magicToken}`);
     assert(reviewAfterApproval.text.includes('Approved'), 'Review page must reflect Approved state');
-    console.log('   ✓ Single-use magic link generation, external review, and approval gate verified');
+
+    // Replay attack prevention: Attempt to approve again with same token -> must return 403
+    const replayApprove = await api(`/api/review/${createdPostId}/approve`, {
+      method: 'POST',
+      body: { token: magicToken }
+    });
+    assert.strictEqual(replayApprove.status, 403, 'Replay attack on consumed magic link must be rejected (403)');
+    console.log('   ✓ Single-use magic link atomic invalidation & replay prevention verified');
 
     // ------------------------------------------------------------------------
     // 8. Failed Post Retry & Diagnostics

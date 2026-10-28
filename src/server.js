@@ -9,6 +9,7 @@ const { startScheduler, stopScheduler } = require('./scheduler');
 const { authenticate } = require('./middleware/auth');
 const { validateHostAndOrigin } = require('./middleware/security');
 const { uploadDir } = require('./middleware/upload');
+const { verifySignedLocalMediaUrl } = require('./media/storage');
 const { isPostgresConfigured, runPostgresMigrations } = require('./db/postgres');
 
 // Modular Route Handlers
@@ -35,7 +36,7 @@ app.use(
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
         mediaSrc: ["'self'", "data:", "blob:", "https:", "http:"],
-        connectSrc: ["'self'", "https:", "http:", "ws:", "wss:"],
+        connectSrc: ["'self'", "https://graph.threads.net", "https://graph.facebook.com", "https://api.twitter.com", "https://upload.twitter.com", "https://api.linkedin.com", "https://www.googleapis.com", "https://*.trycloudflare.com"],
         frameSrc: ["'self'"],
         objectSrc: ["'none'"]
       }
@@ -64,9 +65,23 @@ app.use(validateHostAndOrigin);
 // 5. Global Authentication Token / API Key Extractor
 app.use(authenticate);
 
-// 6. Static Dashboard & Uploads Serving
+// 6. Static Dashboard & Uploads Serving (Protected by Auth or HMAC Signature)
 app.use(express.static(path.join(__dirname, '..', 'public')));
-app.use('/uploads', express.static(uploadDir));
+app.use('/uploads', (req, res, next) => {
+  const filename = path.basename(req.path);
+  const { sig, exp } = req.query;
+  const isAuthenticated = Boolean(req.user);
+  const isValidSignature = verifySignedLocalMediaUrl(filename, sig, exp);
+
+  if (isAuthenticated || isValidSignature) {
+    return next();
+  }
+
+  return res.status(403).json({
+    success: false,
+    error: 'Forbidden: Access to client media requires active authentication or a valid signed URL.'
+  });
+}, express.static(uploadDir));
 
 // 7. Mount All Route Modules
 app.use(systemRoutes);

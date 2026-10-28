@@ -160,11 +160,13 @@ router.post('/api/review/:id/approve', (req, res) => {
 
     const isValid = validateApprovalToken(token, post.approval_token_hash, post.token_expires_at);
     if (!isValid) {
-      return res.status(403).json({ success: false, error: 'Invalid or expired approval token' });
+      return res.status(403).json({ success: false, error: 'Invalid, expired, or already consumed approval token' });
     }
 
-    db.setWorkflowState(postId, 'APPROVED');
-    db.updatePostSchedule(postId, post.scheduled_at, 'scheduled');
+    const consumed = db.consumeApprovalToken(postId, post.approval_token_hash, 'APPROVED');
+    if (!consumed) {
+      return res.status(403).json({ success: false, error: 'Approval token was already consumed or is invalid' });
+    }
 
     res.json({ success: true, postId, status: 'scheduled' });
   } catch (err) {
@@ -181,10 +183,14 @@ router.post('/api/review/:id/reject', (req, res) => {
 
     const isValid = validateApprovalToken(token, post.approval_token_hash, post.token_expires_at);
     if (!isValid) {
-      return res.status(403).json({ success: false, error: 'Invalid or expired approval token' });
+      return res.status(403).json({ success: false, error: 'Invalid, expired, or already consumed approval token' });
     }
 
-    db.setWorkflowState(postId, 'REJECTED');
+    const consumed = db.consumeApprovalToken(postId, post.approval_token_hash, 'REJECTED');
+    if (!consumed) {
+      return res.status(403).json({ success: false, error: 'Approval token was already consumed or is invalid' });
+    }
+
     res.json({ success: true, postId, status: 'rejected', notes });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
