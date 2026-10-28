@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const db = require('../db');
 const { isCloudStorageConfigured, uploadLocalFileToCloud } = require('../media/storage');
+const { inspectMedia } = require('../media/transcoder');
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v20.0';
 
@@ -59,12 +60,12 @@ async function uploadFacebookVideo(mediaPath, text, pageId, token) {
     return data.id;
   }
 
-  // Direct multipart upload using native FormData
+  // Direct multipart upload streaming from disk without memory buffering
   const formData = new FormData();
   formData.append('description', text);
   formData.append('access_token', token);
-  const fileBuffer = fs.readFileSync(mediaPath);
-  formData.append('source', new Blob([fileBuffer], { type: 'video/mp4' }), path.basename(mediaPath));
+  const fileBlob = await fs.openAsBlob(mediaPath, { type: 'video/mp4' });
+  formData.append('source', fileBlob, path.basename(mediaPath));
 
   const res = await fetch(videoEndpoint, {
     method: 'POST',
@@ -101,13 +102,13 @@ async function uploadFacebookPhoto(mediaPath, text, pageId, token) {
     return { photoId: data.id, postId: data.post_id || data.id };
   }
 
-  // Direct multipart upload
+  // Direct multipart upload streaming from disk without memory buffering
   const formData = new FormData();
   formData.append('caption', text);
   formData.append('access_token', token);
-  const fileBuffer = fs.readFileSync(mediaPath);
   const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
-  formData.append('source', new Blob([fileBuffer], { type: mime }), path.basename(mediaPath));
+  const fileBlob = await fs.openAsBlob(mediaPath, { type: mime });
+  formData.append('source', fileBlob, path.basename(mediaPath));
 
   const res = await fetch(photoEndpoint, {
     method: 'POST',
@@ -176,8 +177,14 @@ async function publishFacebook(post) {
       };
     }
 
-    const ext = path.extname(mediaPath).toLowerCase();
-    const isVideo = ['.mp4', '.mov', '.m4v', '.avi'].includes(ext);
+    let isVideo = false;
+    try {
+      const mediaInfo = await inspectMedia(mediaPath);
+      isVideo = Boolean(mediaInfo && mediaInfo.hasVideo);
+    } catch {
+      const ext = path.extname(mediaPath).toLowerCase();
+      isVideo = ['.mp4', '.mov', '.m4v', '.avi'].includes(ext);
+    }
 
     if (isVideo) {
       const videoId = await uploadFacebookVideo(mediaPath, text, pageId, token);

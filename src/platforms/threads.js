@@ -15,6 +15,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const db = require('../db');
 const { isCloudStorageConfigured, uploadLocalFileToCloud } = require('../media/storage');
+const { inspectMedia } = require('../media/transcoder');
 
 function getThreadsTokens(clientId = null) {
   if (clientId) {
@@ -89,8 +90,14 @@ async function publishThreads(post) {
     }
 
     if (hasMedia) {
-      const ext = path.extname(mediaPath).toLowerCase();
-      const isVideo = ['.mp4', '.mov', '.m4v'].includes(ext);
+      let isVideo = false;
+      try {
+        const mediaInfo = await inspectMedia(mediaPath);
+        isVideo = Boolean(mediaInfo && mediaInfo.hasVideo);
+      } catch {
+        const ext = path.extname(mediaPath).toLowerCase();
+        isVideo = ['.mp4', '.mov', '.m4v'].includes(ext);
+      }
       const publicMediaUrl = await resolvePublicMediaUrl(mediaPath);
 
       if (isVideo) {

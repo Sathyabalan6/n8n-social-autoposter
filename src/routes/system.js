@@ -1,5 +1,5 @@
 const express = require('express');
-const { getStoredTokens } = require('../platforms/youtube');
+const { getStoredTokens, getYouTubeDailyQuotaUsage } = require('../platforms/youtube');
 const { compilePost, YOUTUBE_CATEGORIES } = require('../compiler');
 const { checkPostgresHealth } = require('../db/postgres');
 const { isCloudStorageConfigured } = require('../media/storage');
@@ -54,7 +54,9 @@ router.get('/api/status', (req, res) => {
     platforms: {
       youtube: {
         configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-        connected: Boolean(ytTokens?.refresh_token || ytTokens?.access_token)
+        connected: Boolean(ytTokens?.refresh_token || ytTokens?.access_token),
+        quota_used_today: getYouTubeDailyQuotaUsage(clientId || 1),
+        quota_daily_limit: 10000
       },
       x: { configured: Boolean(process.env.X_API_KEY) },
       linkedin: { configured: Boolean(process.env.LINKEDIN_ACCESS_TOKEN) },

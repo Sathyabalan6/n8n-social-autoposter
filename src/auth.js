@@ -18,8 +18,8 @@ const ROLE_HIERARCHY = {
 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET || process.env.ENCRYPTION_SECRET;
-  if (!secret) {
-    throw new Error('[Auth Exception] JWT_SECRET or ENCRYPTION_SECRET must be defined.');
+  if (!secret || secret.trim().length < 16) {
+    throw new Error('[Auth Exception] JWT_SECRET must be defined and at least 16 characters.');
   }
   return secret;
 }

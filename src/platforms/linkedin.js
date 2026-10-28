@@ -91,7 +91,6 @@ async function uploadMediaToLinkedIn(filePath, authorUrn, accessToken) {
   const isVideo = ['.mp4', '.mov', '.m4v'].includes(ext);
   const isPdf = ext === '.pdf';
   const fileStats = fs.statSync(filePath);
-  const fileBytes = fs.readFileSync(filePath);
 
   let mimeType = 'image/jpeg';
   if (ext === '.png') mimeType = 'image/png';
@@ -99,6 +98,8 @@ async function uploadMediaToLinkedIn(filePath, authorUrn, accessToken) {
   if (ext === '.webp') mimeType = 'image/webp';
   if (isVideo) mimeType = 'video/mp4';
   if (isPdf) mimeType = 'application/pdf';
+
+  const fileBlob = await fs.openAsBlob(filePath, { type: mimeType });
 
   const baseHeaders = {
     Authorization: `Bearer ${accessToken}`,
@@ -132,14 +133,14 @@ async function uploadMediaToLinkedIn(filePath, authorUrn, accessToken) {
       throw new Error('LinkedIn Document initializeUpload missing uploadUrl or document URN.');
     }
 
-    // --- 2. BINARY PUT UPLOAD FOR DOCUMENT ---
+    // --- 2. STREAMING BINARY PUT UPLOAD FOR DOCUMENT ---
     const putRes = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/pdf'
       },
-      body: fileBytes
+      body: fileBlob
     });
 
     if (!putRes.ok) {
@@ -173,14 +174,14 @@ async function uploadMediaToLinkedIn(filePath, authorUrn, accessToken) {
       throw new Error('LinkedIn Image initializeUpload response did not contain uploadUrl or image URN.');
     }
 
-    // --- 2. BINARY PUT UPLOAD ---
+    // --- 2. STREAMING BINARY PUT UPLOAD ---
     const putRes = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': mimeType
       },
-      body: fileBytes
+      body: fileBlob
     });
 
     if (!putRes.ok) {
@@ -217,7 +218,7 @@ async function uploadMediaToLinkedIn(filePath, authorUrn, accessToken) {
       throw new Error('LinkedIn Video initializeUpload missing uploadInstructions or video URN.');
     }
 
-    // --- 2. BINARY PUT UPLOAD FOR VIDEO ---
+    // --- 2. STREAMING BINARY PUT UPLOAD FOR VIDEO ---
     const uploadUrl = uploadInstructions[0].uploadUrl;
     const putRes = await fetch(uploadUrl, {
       method: 'PUT',
@@ -225,7 +226,7 @@ async function uploadMediaToLinkedIn(filePath, authorUrn, accessToken) {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': mimeType
       },
-      body: fileBytes
+      body: fileBlob
     });
 
     if (!putRes.ok) {

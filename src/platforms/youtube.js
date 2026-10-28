@@ -122,6 +122,20 @@ async function postYouTubeFirstComment(videoId, commentText, clientId = null) {
   };
 }
 
+function getYouTubeDailyQuotaUsage(clientId = 1) {
+  const todayKey = `yt_quota_${new Date().toISOString().split('T')[0]}_${clientId}`;
+  const raw = db.getSetting(todayKey);
+  return raw ? parseInt(raw, 10) : 0;
+}
+
+function recordYouTubeQuotaUsage(clientId = 1, units = 1600) {
+  const todayKey = `yt_quota_${new Date().toISOString().split('T')[0]}_${clientId}`;
+  const current = getYouTubeDailyQuotaUsage(clientId);
+  const updated = current + units;
+  db.setSetting(todayKey, updated);
+  return updated;
+}
+
 async function publishYouTube(post) {
   const tokens = getStoredTokens(post.client_id);
   if (!tokens || (!tokens.refresh_token && !tokens.access_token)) {
@@ -129,6 +143,15 @@ async function publishYouTube(post) {
       platform: 'youtube',
       success: false,
       error: 'YouTube is not connected for this client. Please connect YouTube via Settings.'
+    };
+  }
+
+  const currentQuota = getYouTubeDailyQuotaUsage(post.client_id || 1);
+  if (currentQuota + 1600 > 10000) {
+    return {
+      platform: 'youtube',
+      success: false,
+      error: `YouTube daily API quota limit reached (${currentQuota}/10,000 units used today; upload requires 1,600 units). Quota resets at midnight PST.`
     };
   }
 
@@ -202,6 +225,7 @@ async function publishYouTube(post) {
     });
 
     const videoId = res.data.id;
+    recordYouTubeQuotaUsage(post.client_id || 1, 1600);
 
     // Upload custom thumbnail if provided (up to 50MB)
     let thumbResult = null;
@@ -312,6 +336,8 @@ module.exports = {
   saveTokens,
   publishYouTube,
   uploadYouTubeThumbnail,
+  getYouTubeDailyQuotaUsage,
+  recordYouTubeQuotaUsage,
   postYouTubeFirstComment,
   fetchYouTubeMetrics,
   fetchRecentYouTubeComments,
