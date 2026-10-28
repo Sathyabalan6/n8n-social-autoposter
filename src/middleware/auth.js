@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const db = require('../db');
 const { verifyToken, hasMinimumRole, ROLES } = require('../auth');
 const logger = require('../logger');
 
@@ -39,6 +40,10 @@ function authenticate(req, res, next) {
   }
 
   const token = authHeader.slice(7).trim();
+  if (db.isTokenRevoked(token)) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: Authentication token has been revoked. Please sign in again.' });
+  }
+
   const decoded = verifyToken(token);
   if (!decoded) {
     return res.status(401).json({ success: false, error: 'Unauthorized: Invalid or expired authentication token' });

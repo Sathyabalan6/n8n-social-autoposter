@@ -62,7 +62,12 @@ server.listen(0, '127.0.0.1', async () => {
     const status = await api('/api/status');
     assert.strictEqual(status.status, 200, '/api/status should return 200');
     assert.strictEqual(status.data.status, 'ok');
-    console.log('   ✓ /healthz, /readyz, and /api/status are healthy and public');
+
+    const metrics = await api('/metrics');
+    assert.strictEqual(metrics.status, 200, '/metrics should return 200');
+    assert(metrics.text.includes('process_uptime_seconds'), 'Must export process_uptime_seconds');
+    assert(metrics.text.includes('socialpulse_posts_total'), 'Must export socialpulse_posts_total');
+    console.log('   ✓ /healthz, /readyz, /api/status, and /metrics Prometheus probes verified');
 
     // ------------------------------------------------------------------------
     // 2. DNS Rebinding & Host Header Validation

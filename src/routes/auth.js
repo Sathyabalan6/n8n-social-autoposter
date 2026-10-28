@@ -101,6 +101,16 @@ router.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ success: true, user });
 });
 
+router.post('/api/auth/logout', requireAuth, (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    const expiresAt = req.user?.exp ? req.user.exp * 1000 : Date.now() + 86400000;
+    db.revokeToken(token, expiresAt);
+  }
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
 router.get('/api/users', requireAuth, requireRole(ROLES.OWNER, ROLES.ADMIN), (req, res) => {
   try {
     const clientId = req.user.role === ROLES.OWNER && req.query.clientId

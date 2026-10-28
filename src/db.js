@@ -161,6 +161,12 @@ db.exec(`
     created_at TEXT NOT NULL,
     expires_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS revoked_tokens (
+    token_hash TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `);
 
 // Safe migrations for existing databases
@@ -471,6 +477,14 @@ const stmtInsertIdempotency = db.prepare(`
     expires_at = excluded.expires_at
 `);
 const stmtCleanExpiredIdempotency = db.prepare(`DELETE FROM idempotency_keys WHERE expires_at < ?`);
+
+// Revoked Tokens Statements (JWT Logout Denylist)
+const stmtInsertRevokedToken = db.prepare(`
+  INSERT INTO revoked_tokens (token_hash, expires_at, created_at) VALUES (?, ?, ?)
+  ON CONFLICT(token_hash) DO NOTHING
+`);
+const stmtIsTokenRevoked = db.prepare(`SELECT 1 FROM revoked_tokens WHERE token_hash = ? AND expires_at > ?`);
+const stmtCleanRevokedTokens = db.prepare(`DELETE FROM revoked_tokens WHERE expires_at <= ?`);
 
 // Seed default Admin user if none exists
 try {
@@ -788,6 +802,24 @@ module.exports = {
       platforms: safeJsonParse(r.platforms, []),
       results: safeJsonParse(r.results, {})
     }));
+  },
+  // Revoked Tokens API (Logout Denylist)
+  revokeToken: (token, expiresAtEpochMs) => {
+    if (!token) return;
+    const crypto = require('node:crypto');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const now = new Date();
+    stmtInsertRevokedToken.run(tokenHash, expiresAtEpochMs || (Date.now() + 86400000), now.toISOString());
+  },
+  isTokenRevoked: (token) => {
+    if (!token) return false;
+    const crypto = require('node:crypto');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const row = stmtIsTokenRevoked.get(tokenHash, Date.now());
+    return Boolean(row);
+  },
+  cleanExpiredRevokedTokens: () => {
+    stmtCleanRevokedTokens.run(Date.now());
   },
   // Engagement Tasks API (Actionable Inbox)
   createEngagementTask: (task) => {

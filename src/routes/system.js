@@ -1,4 +1,5 @@
 const express = require('express');
+const db = require('../db');
 const { getStoredTokens, getYouTubeDailyQuotaUsage } = require('../platforms/youtube');
 const { compilePost, YOUTUBE_CATEGORIES } = require('../compiler');
 const { checkPostgresHealth } = require('../db/postgres');
@@ -80,6 +81,47 @@ router.post('/api/compile', requireAuth, (req, res) => {
     res.json({ success: true, compiled });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Prometheus Observability Metrics Probe
+router.get('/metrics', (_req, res) => {
+  try {
+    const posts = db.getAllPosts();
+    const counts = { completed: 0, scheduled: 0, draft: 0, failed: 0, partially_completed: 0 };
+    posts.forEach((p) => {
+      if (counts[p.status] !== undefined) counts[p.status]++;
+    });
+
+    const ytQuota = getYouTubeDailyQuotaUsage(1);
+    const cbStatus = circuitBreaker.getStatus();
+
+    let output = '';
+    output += '# HELP process_uptime_seconds Process uptime in seconds\n';
+    output += '# TYPE process_uptime_seconds gauge\n';
+    output += `process_uptime_seconds ${process.uptime()}\n\n`;
+
+    output += '# HELP socialpulse_posts_total Count of social media posts by status\n';
+    output += '# TYPE socialpulse_posts_total gauge\n';
+    Object.entries(counts).forEach(([status, val]) => {
+      output += `socialpulse_posts_total{status="${status}"} ${val}\n`;
+    });
+    output += '\n';
+
+    output += '# HELP socialpulse_youtube_quota_units_used Estimated daily YouTube API quota used\n';
+    output += '# TYPE socialpulse_youtube_quota_units_used gauge\n';
+    output += `socialpulse_youtube_quota_units_used ${ytQuota}\n\n`;
+
+    output += '# HELP socialpulse_circuit_breaker_tripped Circuit breaker open state (1 = open, 0 = closed)\n';
+    output += '# TYPE socialpulse_circuit_breaker_tripped gauge\n';
+    Object.entries(cbStatus).forEach(([plat, state]) => {
+      output += `socialpulse_circuit_breaker_tripped{platform="${plat}"} ${state.state === 'OPEN' ? 1 : 0}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.send(output);
+  } catch (err) {
+    res.status(500).send(`# Error generating metrics: ${err.message}\n`);
   }
 });
 

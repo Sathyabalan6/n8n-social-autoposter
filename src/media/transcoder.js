@@ -6,10 +6,36 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { Worker } = require('node:worker_threads');
 const ffmpegStatic = require('ffmpeg-static');
 const ffprobeStatic = require('ffprobe-static');
+
+// Concurrency Semaphore: Restrict heavy video transcoding to prevent CPU starvation
+const MAX_CONCURRENT_TRANSCODES = Math.max(1, Math.min(2, (os.cpus()?.length || 2) - 1));
+let activeTranscodes = 0;
+const transcodeQueue = [];
+
+function processNextTranscode() {
+  if (activeTranscodes >= MAX_CONCURRENT_TRANSCODES || transcodeQueue.length === 0) {
+    return;
+  }
+  const nextJob = transcodeQueue.shift();
+  activeTranscodes++;
+  nextJob()
+    .finally(() => {
+      activeTranscodes--;
+      processNextTranscode();
+    });
+}
+
+function runWithConcurrencyCap(taskFn) {
+  return new Promise((resolve, reject) => {
+    transcodeQueue.push(() => taskFn().then(resolve, reject));
+    processNextTranscode();
+  });
+}
 
 /**
  * Inspects a media file and extracts video, audio, and container metadata
@@ -162,42 +188,45 @@ function transcodeToVertical(inputPath, outputPath) {
 
 /**
  * Transcodes a video in a separate background OS worker thread.
+ * Managed with an internal concurrency semaphore to prevent CPU saturation.
  */
 function transcodeToVerticalInWorker(inputPath, outputPath, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!fs.existsSync(inputPath)) {
-      return reject(new Error(`Input file not found: ${inputPath}`));
-    }
-
-    const workerPath = path.join(__dirname, 'worker.js');
-    const worker = new Worker(workerPath, {
-      workerData: {
-        inputPath,
-        outputPath,
-        threads: options.threads || 2
+  return runWithConcurrencyCap(() => {
+    return new Promise((resolve, reject) => {
+      if (!fs.existsSync(inputPath)) {
+        return reject(new Error(`Input file not found: ${inputPath}`));
       }
-    });
 
-    worker.on('message', (msg) => {
-      if (msg.type === 'done') {
-        resolve({
-          success: true,
+      const workerPath = path.join(__dirname, 'worker.js');
+      const worker = new Worker(workerPath, {
+        workerData: {
+          inputPath,
           outputPath,
-          filename: path.basename(outputPath)
-        });
-      } else if (msg.type === 'error') {
-        reject(new Error(`Worker transcoding error: ${msg.error}`));
-      }
-    });
+          threads: options.threads || 2
+        }
+      });
 
-    worker.on('error', (err) => {
-      reject(new Error(`Transcoder worker thread failed: ${err.message}`));
-    });
+      worker.on('message', (msg) => {
+        if (msg.type === 'done') {
+          resolve({
+            success: true,
+            outputPath,
+            filename: path.basename(outputPath)
+          });
+        } else if (msg.type === 'error') {
+          reject(new Error(`Worker transcoding error: ${msg.error}`));
+        }
+      });
 
-    worker.on('exit', (code) => {
-      if (code !== 0) {
-        reject(new Error(`Transcoder worker stopped with exit code ${code}`));
-      }
+      worker.on('error', (err) => {
+        reject(new Error(`Transcoder worker thread failed: ${err.message}`));
+      });
+
+      worker.on('exit', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Transcoder worker stopped with exit code ${code}`));
+        }
+      });
     });
   });
 }
