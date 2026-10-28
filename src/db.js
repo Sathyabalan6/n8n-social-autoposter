@@ -212,6 +212,70 @@ if (countClients.c === 0) {
   `);
 }
 
+// Seed starter demo posts if empty for smooth first-run onboarding
+const countPosts = db.prepare('SELECT COUNT(*) as c FROM posts').get();
+if (countPosts.c === 0) {
+  const now = new Date();
+  const pastIso = new Date(now.getTime() - 2 * 3600 * 1000).toISOString();
+  const tomorrow = new Date(now.getTime() + 24 * 3600 * 1000);
+  tomorrow.setHours(9, 30, 0, 0);
+  const futureIso = tomorrow.toISOString();
+
+  // 1. Completed demo post
+  db.exec(`
+    INSERT INTO posts (
+      client_id, status, scheduled_at, created_at, updated_at,
+      master_text, master_hashtags, platforms, youtube_title,
+      first_comment, results
+    ) VALUES (
+      1, 'completed', '${pastIso}', '${pastIso}', '${pastIso}',
+      '🚀 Welcome to SocialPulse! Your self-hosted multi-channel social studio is running.',
+      'buildinpublic tech opensource',
+      '["youtube", "x", "linkedin"]',
+      'Welcome to SocialPulse Studio',
+      'Check out the project repository on GitHub: https://github.com/Sathyabalan6/social-auto-post',
+      '{"youtube":{"success":true,"videoId":"demo_vid_01"},"x":{"success":true,"tweetId":"demo_tw_01"},"linkedin":{"success":true,"postUrn":"urn:li:share:demo01"}}'
+    );
+  `);
+
+  const demoPostRow = db.prepare('SELECT id FROM posts ORDER BY id DESC LIMIT 1').get();
+  if (demoPostRow) {
+    db.exec(`
+      INSERT INTO post_metrics_snapshots (
+        post_id, platform, snapshot_type, snapshot_time,
+        impression_count, reach_count, like_count, reply_count, repost_count,
+        created_at
+      ) VALUES 
+      (${demoPostRow.id}, 'YOUTUBE', 'MANUAL', ${Date.now()}, 420, 390, 38, 5, 0, '${pastIso}'),
+      (${demoPostRow.id}, 'X', 'MANUAL', ${Date.now()}, 890, 810, 64, 12, 9, '${pastIso}');
+    `);
+  }
+
+  // 2. Scheduled demo post for tomorrow
+  db.exec(`
+    INSERT INTO posts (
+      client_id, status, scheduled_at, created_at, updated_at,
+      master_text, master_hashtags, platforms, youtube_title,
+      first_comment
+    ) VALUES (
+      1, 'scheduled', '${futureIso}', '${now.toISOString()}', '${now.toISOString()}',
+      '💡 Pro-tip: Decoupling your external links into the First Comment boosts organic reach by up to 80% on X and LinkedIn.',
+      'socialmedia growth strategy',
+      '["x", "linkedin", "threads"]',
+      'Growth Strategy Tip',
+      'Read the full benchmark study at https://example.com/algorithm-reach'
+    );
+  `);
+
+  // Default queue rules
+  db.exec(`
+    INSERT INTO queue_rules (client_id, timezone, iso_weekday, local_time, created_at) VALUES
+    (1, 'UTC', 1, '09:30', '${now.toISOString()}'),
+    (1, 'UTC', 3, '14:00', '${now.toISOString()}'),
+    (1, 'UTC', 5, '10:00', '${now.toISOString()}');
+  `);
+}
+
 function safeJsonParse(jsonString, fallback) {
   if (!jsonString) return fallback;
   try {

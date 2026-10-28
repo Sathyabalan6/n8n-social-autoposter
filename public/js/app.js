@@ -81,6 +81,20 @@ document.addEventListener('DOMContentLoaded', () => {
   setupKeyboardShortcuts();
   setupMobilePreviewDrawer();
 
+  // First-run banner dismiss handler
+  const firstRunBanner = document.querySelector('#first-run-banner');
+  const btnDismissFirstRun = document.querySelector('#btn-dismiss-first-run');
+  if (firstRunBanner) {
+    if (localStorage.getItem('socialpulse_dismiss_welcome') === '1') {
+      firstRunBanner.style.display = 'none';
+    } else if (btnDismissFirstRun) {
+      btnDismissFirstRun.addEventListener('click', () => {
+        firstRunBanner.style.display = 'none';
+        localStorage.setItem('socialpulse_dismiss_welcome', '1');
+      });
+    }
+  }
+
   // Initial data fetches
   fetchClients();
   fetchQueue();
