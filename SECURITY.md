@@ -11,7 +11,7 @@
 
 ## Reporting a Vulnerability
 
-We take the security of SocialPulse Studio seriously. If you believe you have discovered a vulnerability, please do **NOT** open a public issue.
+We take the security of SocialPulse seriously. If you believe you have discovered a vulnerability, please do **NOT** open a public issue.
 
 Please report vulnerabilities via:
 - **Email:** `security@socialpulse.local` or through GitHub Private Vulnerability Reporting.
@@ -22,7 +22,7 @@ Please report vulnerabilities via:
 
 ## Enterprise Security Architecture & Invariants
 
-SocialPulse Studio 2.0 incorporates defense-in-depth security controls:
+SocialPulse incorporates defense-in-depth security controls:
 
 ### 1. AES-256-GCM Envelope Encryption (SPV2 Vault)
 - **Dynamic Per-Record Salts:** Encryption keys are derived using PBKDF2-HMAC-SHA256 with 310,000 iterations (OWASP recommended minimum) and a unique, cryptographically random 16-byte salt (`crypto.randomBytes(16)`) per record.

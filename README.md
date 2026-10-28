@@ -102,7 +102,7 @@ npm test
 
 ## Documentation
 
-* [API Reference](API_REFERENCE.md) — REST endpoint documentation and payload schemas.
+* [API Reference](docs/api-reference.md) — REST endpoint documentation and payload schemas.
 * [Deployment Guide](DEPLOYMENT_GUIDE.md) — Production setup for Ubuntu/VPS, PM2, Docker, and Nginx.
 * [Security Policy](SECURITY.md) — Vulnerability reporting, token encryption, and session boundaries.
 * [Architecture Notes](docs/architecture.md) — Design decisions, SQLite WAL concurrency, and queue mechanics.

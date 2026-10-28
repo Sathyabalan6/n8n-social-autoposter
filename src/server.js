@@ -1374,7 +1374,7 @@ if (require.main === module) {
   const HOST = process.env.HOST || '127.0.0.1';
   server = app.listen(PORT, HOST, () => {
     logger.info(`=======================================================`);
-    logger.info(`🚀 SocialPulse Studio Enterprise Engine v2.0 running at:`);
+    logger.info(`🚀 SocialPulse running at:`);
     logger.info(`👉 http://${HOST}:${PORT}`);
     logger.info(`=======================================================`);
   });

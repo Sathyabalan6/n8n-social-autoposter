@@ -1,5 +1,5 @@
 # ============================================================================
-# SocialPulse Studio - Enterprise Multi-Stage Production Dockerfile
+# SocialPulse - Multi-Stage Production Dockerfile
 # Follows CIS & OWASP container security standards (Non-root user, slim base)
 # ============================================================================
 

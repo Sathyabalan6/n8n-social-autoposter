@@ -1,6 +1,6 @@
-# 🛠️ SocialPulse Studio — Production Deployment & Developer Setup Guide
+# 🛠️ SocialPulse — Production Deployment & Developer Setup Guide
 
-This guide walks you through setting up developer apps on official social platforms, configuring the application, and deploying SocialPulse Studio in production.
+This guide walks you through setting up developer apps on official social platforms, configuring the application, and deploying SocialPulse in production.
 
 ---
 
@@ -112,7 +112,7 @@ ENCRYPTION_SECRET=your_generated_64_char_hex_secret
    ```bash
    npm install -g pm2
    ```
-2. Start SocialPulse Studio:
+2. Start SocialPulse:
    ```bash
    pm2 start src/server.js --name "socialpulse"
    ```
@@ -129,7 +129,7 @@ ENCRYPTION_SECRET=your_generated_64_char_hex_secret
 1. Create a service unit file `/etc/systemd/system/socialpulse.service`:
    ```ini
    [Unit]
-   Description=SocialPulse Studio Publishing Server
+   Description=SocialPulse Publishing Server
    After=network.target
 
    [Service]
